@@ -1,4 +1,5 @@
 import { captionEntities } from '../reel/caption';
+import { bioUrl } from '../reel/extract';
 import type { SavedProfile, SavedReel } from '../reel/records';
 import type { Language } from '../reel/i18n';
 
@@ -14,7 +15,7 @@ export function exportRow(reel: SavedReel, language: Language = 'zh'): (string |
     author?.avatar ?? null, author?.verified === null || author?.verified === undefined ? null : author.verified ? yes : no,
     author?.biography ?? null, author?.followers ?? null, author?.following ?? null,
     author?.posts ?? null, author?.private === null || author?.private === undefined ? null : author.private ? yes : no,
-    author?.externalUrl ?? null, author?.profileUrl ?? null,
+    author?.externalUrl ? bioUrl(author.externalUrl) : null, author?.profileUrl ?? null,
     JSON.stringify(reel.authors.slice(1)), JSON.stringify(reel.taggedUsers ?? []),
     reel.caption, caption.tags.join(', '), caption.mentions.join(', '), caption.links.join(', '),
     reel.videoUrl, reel.coverUrl, reel.plays, reel.likes, reel.comments, reel.reposts,
@@ -42,7 +43,7 @@ export const exportHeadersEn = [
 export function exportProfileRow(profile: SavedProfile, language: Language = 'zh'): (string | number | Date | null)[] {
   return [
     profile.avatar, profile.name, profile.id, profile.username, profile.posts, profile.followers,
-    profile.following, profile.biography, JSON.stringify(profile.bioLinks),
+    profile.following, profile.biography, JSON.stringify(profile.bioLinks.map(bioUrl).filter((url): url is string => url !== null)),
     profile.verified === null ? null : profile.verified ? language === 'en' ? 'Yes' : '是' : language === 'en' ? 'No' : '否',
     profile.joinedAt, profile.basedIn, profile.verifiedAt, profile.profileUrl, new Date(profile.savedAt),
   ];

@@ -31,6 +31,83 @@ const mediaUrl = (value: unknown): string | null => {
   }
 };
 
+/**
+ * 还原 Instagram 的 bio 外链跳转：l.instagram.com 只是中转页，真实地址放在 u 参数里。
+ * 直接从原始地址截取 u 参数并逐层解码；无法还原或目标不是 HTTPS 时保留原链接。
+ */
+export function bioUrl(value: unknown): string | null {
+  const input = string(value);
+  if (!input) return null;
+  let url: string = input;
+  // 跳转可能嵌套，限制次数避免被构造出的循环链接反复展开。
+  for (let depth = 0; depth < 3; depth += 1) {
+    const parsed = safeUrl(url);
+    if (!parsed || !isWebProtocol(parsed.protocol)) return depth === 0 ? null : url;
+    if (!isRedirectHost(parsed.hostname)) return url;
+    // 优先从原始字符串截取 u 参数，避免参数顺序或重复编码影响解析。
+    const target: string | null = rawRedirectTarget(url) ?? parsed.searchParams.get('u');
+    if (!target) return url;
+    const resolved: string | null = resolveRedirectTarget(target);
+    if (!resolved) return url;
+    url = resolved;
+  }
+  return url;
+}
+
+/** 判断是否为 Instagram 的外链跳转域名。 */
+function isRedirectHost(hostname: string): boolean {
+  return hostname === 'l.instagram.com' || hostname.endsWith('.l.instagram.com');
+}
+
+/** 只接受可正常打开的 HTTP/HTTPS 协议。 */
+function isWebProtocol(protocol: string): boolean {
+  return protocol === 'http:' || protocol === 'https:';
+}
+
+/** 从原始地址中截取 u 参数（可能不在参数首位），保留原始百分号编码。 */
+function rawRedirectTarget(raw: string): string | null {
+  return raw.match(/[?&]u=([^&#]*)/i)?.[1] ?? null;
+}
+
+/** 对跳转目标反复做 URL 解码，直到得到合法的 HTTP/HTTPS 地址。 */
+function resolveRedirectTarget(value: string): string | null {
+  let candidate = value;
+  for (let depth = 0; depth < 3; depth += 1) {
+    // 目标可能是协议相对地址，补上 HTTPS 后再校验。
+    const resolved = webUrl(candidate.startsWith('//') ? `https:${candidate}` : candidate);
+    if (resolved) return resolved;
+    if (!candidate.includes('%')) return null;
+    const decoded = decodePercent(candidate);
+    if (decoded === candidate) return null;
+    candidate = decoded;
+  }
+  return null;
+}
+
+/** 返回规范化的 HTTP/HTTPS 地址，其它协议或非法地址返回 null。 */
+function webUrl(value: string): string | null {
+  const url = safeUrl(value);
+  return url && isWebProtocol(url.protocol) ? url.href : null;
+}
+
+/** 安全解析地址，非法字符串返回 null。 */
+function safeUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 执行一次 URL 解码，非法转义序列保持原样。 */
+function decodePercent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** 将接口的 Unix 秒或跨世界传递的 ISO 时间规范化为 UTC。 */
 function publicationTime(value: unknown): string | null {
   const seconds = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value)) ? Number(value) : null;
@@ -57,7 +134,7 @@ export function authorFrom(value: unknown): Author | null {
     following: number(user?.following_count, path(user, 'edge_follow', 'count')),
     posts: number(user?.media_count, path(user, 'edge_owner_to_timeline_media', 'count')),
     private: typeof user?.is_private === 'boolean' ? user.is_private : null,
-    externalUrl: mediaUrl(user?.external_url),
+    externalUrl: bioUrl(user?.external_url),
     profileUrl: `https://www.instagram.com/${encodeURIComponent(username)}/`,
   };
 }
@@ -69,7 +146,7 @@ export function profileFrom(value: unknown): Profile | null {
   if (!user || !author || !/^[A-Za-z0-9._]{1,30}$/.test(author.username)) return null;
   const about = record(user.about_this_account) ?? record(user.account_info);
   const links = Array.isArray(user.bio_links) ? user.bio_links.slice(0, 20) : [];
-  const bioLinks = [user.external_url, ...links.map(link => record(link)?.url)].map(mediaUrl)
+  const bioLinks = [user.external_url, ...links.map(link => record(link)?.url)].map(bioUrl)
     .filter((url): url is string => url !== null);
   return {
     ...author,

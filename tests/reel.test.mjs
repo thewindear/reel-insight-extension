@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { captionEntities } from '../src/reel/caption.ts';
-import { findProfile, findReels, mergeProfiles, mergeReels, profileFrom, profileFromPageEvent, reelFromPageEvent } from '../src/reel/extract.ts';
+import { bioUrl, findProfile, findReels, mergeProfiles, mergeReels, profileFrom, profileFromPageEvent, reelFromPageEvent } from '../src/reel/extract.ts';
 
 const payload = { data: { reels_media: [{
   code: 'ABC123', pk: 456, is_video: true, taken_at: 1792063053,
@@ -89,4 +89,34 @@ assert.deepEqual(mergeProfiles(profile, profileFrom({ username: 'creator' })).bi
   ['https://example.com/home'], '精简响应未提供链接列表时保留已采集的链接');
 assert.equal(profileFromPageEvent(profileFrom({ username: 'creator' })).bioLinksComplete, false,
   '跨世界重建时不能把缺失的链接字段误判为完整空列表');
+// l.instagram.com 只是外链跳转，必须取 u 参数里的真实地址。
+assert.equal(bioUrl('https://l.instagram.com/?u=https%3A%2F%2Fexample.com%2Fbio%3Fa%3D1%26b%3D2&e=ATMxyz'),
+  'https://example.com/bio?a=1&b=2');
+assert.equal(bioUrl('https://l.instagram.com/?u=https%253A%252F%252Fexample.com%252Fbio%253Fa%253D1&e=ATMxyz'),
+  'https://example.com/bio?a=1', 'u 参数被重复编码时也要解码到底');
+assert.equal(bioUrl('https://l.instagram.com/?u=https%3A%2F%2Fexample.com%2F%25E4%25B8%25AD%25E6%2596%2587&e=ATMxyz'),
+  'https://example.com/%E4%B8%AD%E6%96%87', '中文路径解码后重新规范化为可打开地址');
+assert.equal(bioUrl('https://l.instagram.com/?e=ATMxyz'), 'https://l.instagram.com/?e=ATMxyz', '缺少 u 参数时保留原链接');
+assert.equal(bioUrl('https://l.instagram.com/?u=http%3A%2F%2Fexample.com%2F'), 'http://example.com/',
+  '目标是 HTTP 时也要解码出完整链接');
+assert.equal(bioUrl('https://l.instagram.com/?e=ATMxyz&u=https%3A%2F%2Fexample.com%2Fpath'), 'https://example.com/path',
+  'u 参数不在首位时也要还原');
+assert.equal(bioUrl('https://www.l.instagram.com/?u=https%3A%2F%2Fexample.com%2F'), 'https://example.com/',
+  '带 www 的跳转域名也要还原');
+assert.equal(bioUrl('https://l.instagram.com/?utm=https%3A%2F%2Fexample.com%2F'),
+  'https://l.instagram.com/?utm=https%3A%2F%2Fexample.com%2F', '不把 u 前缀相同的参数当成跳转目标');
+assert.equal(bioUrl('https://l.instagram.com/?u=%2F%2Fexample.com%2Fpath'), 'https://example.com/path',
+  '协议相对的目标地址也要还原');
+assert.equal(bioUrl('javascript:alert(1)'), null);
+assert.equal(bioUrl('https://example.com/plain'), 'https://example.com/plain');
+assert.equal(bioUrl('http://example.com/plain'), 'http://example.com/plain');
+assert.equal(bioUrl('https://l.instagram.com/?u=http%3A%2F%2Fwww.stryvora.store%2Fproducts%2Fvest%3Futm_source%3Dig%26utm_medium%3Dsocial%26utm_content%3Dlink_in_bio%26fbclid%3DPAZXh0bgNhZW0CMTEAcGRvZgJzcnRjBmFwcF9pZA85MzY2MTk3NDMzOTI0NTkAAacLK3c1kKYg9Rl1niQL1fy5W0gx-rrUEoOZ9OT4kHLNenjX4oVU-VbxEeywqw_aem_KhAAK_rEddY3X6lWsqzcJA&e=AUDq8B7lgLv0YIlsOmhgcCLWL5aiFIlBqpwzAFiA-hHr4z0JDYt1xMwsFLmzNVS7XklH3BrDuooMJMjSb_rvd9Kdec-981DBjULnPkzvmQ770fYTEtIWw3aUGCOraVyRLoDlz0jMTFvV'),
+  'http://www.stryvora.store/products/vest?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAcGRvZgJzcnRjBmFwcF9pZA85MzY2MTk3NDMzOTI0NTkAAacLK3c1kKYg9Rl1niQL1fy5W0gx-rrUEoOZ9OT4kHLNenjX4oVU-VbxEeywqw_aem_KhAAK_rEddY3X6lWsqzcJA',
+  '真实 bio 跳转链接要完整解码');
+const redirectProfile = profileFrom({ username: 'creator',
+  external_url: 'https://l.instagram.com/?u=https%3A%2F%2Flinktr.ee%2Fcreator&e=ATMxyz',
+  bio_links: [{ url: 'https://l.instagram.com/?u=https%3A%2F%2Fexample.com%2Fbio&e=ATMxyz' }, { url: 'https://example.com/home' }],
+});
+assert.equal(redirectProfile.externalUrl, 'https://linktr.ee/creator', '达人头像链接应还原跳转地址');
+assert.deepEqual(redirectProfile.bioLinks, ['https://linktr.ee/creator', 'https://example.com/bio', 'https://example.com/home']);
 console.log('Reel extraction checks passed');

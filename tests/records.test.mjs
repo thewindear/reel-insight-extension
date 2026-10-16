@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import writeExcelFile from 'write-excel-file/universal';
 import { unzipSync } from 'fflate';
-import { mergeProfiles, mergeReels } from '../src/reel/extract.ts';
+import { mergeProfiles, mergeReels, bioUrl } from '../src/reel/extract.ts';
 import { captionEntities } from '../src/reel/caption.ts';
 
 /** 在测试中加载依赖少量浏览器模块的纯数据逻辑。 */
@@ -17,7 +17,8 @@ function load(path, dependencies) {
 }
 
 const { upsertProfile, upsertReel, withoutShares } = load('../src/reel/records.ts', { './extract': { mergeProfiles, mergeReels } });
-const { exportProfileRow, exportRow, exportHeaders, exportHeadersEn } = load('../src/popup/export.ts', { '../reel/caption': { captionEntities } });
+const { exportProfileRow, exportRow, exportHeaders, exportHeadersEn } = load('../src/popup/export.ts',
+  { '../reel/caption': { captionEntities }, '../reel/extract': { bioUrl } });
 const author = { id: '7', username: 'creator', name: 'Creator', avatar: null, verified: false,
   biography: null, followers: 0, following: null, posts: null, private: false,
   externalUrl: null, profileUrl: 'https://www.instagram.com/creator/' };

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { captionEntities } from '../reel/caption';
+import { bioUrl } from '../reel/extract';
 import { withoutShares, type SavedProfile, type SavedReel } from '../reel/records';
 import { defaultSettings, settingsFrom, type Settings } from '../reel/settings';
 import type { Author, Reel } from '../reel/types';
@@ -33,7 +34,7 @@ function formatPublishedAt(value: string, language: Language): string {
   return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-/** 限制外链为 HTTPS，避免页面数据注入不安全协议。 */
+/** 限制资源地址为 HTTPS，避免页面数据注入不安全协议。 */
 function safeHref(value: string | null): string | null {
   if (!value) return null;
   try { return new URL(value).protocol === 'https:' ? value : null; }
@@ -65,6 +66,7 @@ function MetricTile({ label, value, icon: Icon }: { label: string; value: number
 function AuthorRow({ author, role }: { author: Author; role: '发布者' | '合作者' | '已标记' }): React.ReactNode {
   const t = useText();
   const profile = `https://www.instagram.com/${encodeURIComponent(author.username)}/`;
+  const externalHref = bioUrl(author.externalUrl);
   return <div className="py-3">
     <div className="flex items-center gap-3">
       <Avatar size="lg" className="rounded-[13px] ring-1 ring-border">
@@ -92,7 +94,7 @@ function AuthorRow({ author, role }: { author: Author; role: '发布者' | '合�
       {author.private !== null && <span>{t(author.private ? '私密账号' : '公开账号')}</span>}
     </div>
     {author.biography && <p className="ml-[52px] mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">{author.biography}</p>}
-    {safeHref(author.externalUrl) && <a href={author.externalUrl!} target="_blank" rel="noopener noreferrer" className="ml-[52px] mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">{t('作者链接')} <ExternalLink className="size-3" /></a>}
+    {externalHref && <a href={externalHref} target="_blank" rel="noopener noreferrer" className="ml-[52px] mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">{t('作者链接')} <ExternalLink className="size-3" /></a>}
   </div>;
 }
 
@@ -306,7 +308,7 @@ function BioLinks({ links }: { links: string[] }): React.ReactNode {
   const t = useText();
   const [copyStatus, setCopyStatus] = useState<{ url: string; error: boolean } | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const validLinks = links.map(safeHref).filter((url): url is string => url !== null);
+  const validLinks = links.map(bioUrl).filter((url): url is string => url !== null);
 
   /** 将完整链接写入剪贴板，并在当前链接旁反馈结果。 */
   async function copyLink(url: string): Promise<void> {

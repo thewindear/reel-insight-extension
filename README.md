@@ -55,6 +55,8 @@ You can also manually collect the current creator by clicking **Collect Creator*
 
 Creator records are identified by username. Collecting the same creator again updates the existing record, including replacing the previous list of bio links.
 
+Instagram wraps some bio links in its `l.instagram.com` redirect. The extension unwraps the `u` parameter and stores the full destination URL instead of the redirect link.
+
 ### ⚡ Automated Collection
 
 Reel Insight supports multiple collection workflows.
