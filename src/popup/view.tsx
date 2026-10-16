@@ -577,7 +577,7 @@ export function Popup(): React.ReactNode {
             state.progress.state !== 'idle' && <p className="mt-2 text-[11px] text-muted-foreground" role="status">{t(state.progress.state === 'running' ? '正在补全' : state.progress.state === 'scanning' ? '正在加载更多 Reel' : state.progress.state === 'done' ? '补全结束' : state.progress.state === 'stopped' ? '已停止' : '补全中断')} · {t('已处理')} {state.progress.completed} / {state.progress.total}{state.progress.failed ? ` · ${t('未取得')} ${state.progress.failed}` : ''}</p>}
         </div>}
         {state.kind === 'profile' && tab === 'profiles' && <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-border bg-secondary/50 p-3">
-          <p className="text-[12px] text-muted-foreground">{t('采集当前达人的资料与账户简介')}</p>
+          <div><p className="text-[12px] font-medium">{t('采集达人')}</p><p className="mt-1 text-[11px] text-muted-foreground">{t('采集当前达人的资料与账户简介')}</p></div>
           <Button size="sm" onClick={() => void collectProfile()}>{t('采集达人')}</Button>
         </div>}
         {activeCount > 0 ? <>
