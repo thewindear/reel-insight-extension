@@ -1,0 +1,33 @@
+{
+  "name": "reel-insight-extension",
+  "version": "0.1.0",
+  "description": "采集 Instagram Reels 视频与达人资料，查看互动数据和账户简介，管理记录并导出 Excel。",
+  "author": { "email": "thewindear@outlook.com" },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "test": "node --experimental-strip-types tests/reel.test.mjs && node --experimental-strip-types tests/settings.test.mjs && node tests/message.test.mjs && node tests/profile-enrichment.test.mjs && node tests/auto-profile.test.mjs && node --experimental-strip-types tests/profile-worker.test.mjs && node tests/page.test.mjs && node --experimental-strip-types tests/profile-about.test.mjs && node --experimental-strip-types tests/floating-button.test.mjs && node --experimental-strip-types tests/floating-button-ui.test.mjs && node --experimental-strip-types tests/drawer.test.mjs && node --experimental-strip-types tests/clipboard.test.mjs && node --experimental-strip-types tests/open-details.test.mjs && node tests/popup-navigation.test.mjs && node --experimental-strip-types tests/records.test.mjs && node --experimental-strip-types tests/pagination.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "wxt": "^0.21.4"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "lucide-react": "^1.57.0",
+    "radix-ui": "^1.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "write-excel-file": "^4.1.1"
+  }
+}
