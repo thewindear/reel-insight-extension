@@ -1,41 +1,377 @@
 # Reel Insight
 
-GitHub 仓库名建议：`reel-insight-extension` · 联系邮箱：[thewindear@outlook.com](mailto:thewindear@outlook.com)
+**A Chrome extension for collecting, managing, and exporting Instagram Reels and creator data.**
 
-基于 WXT、TypeScript、React 和 shadcn/ui 的 Chrome 扩展。在 Reel 详情页、达人主页或达人的 Reels 标签页点击悬浮按钮，也可点击插件图标，在 Instagram 页面右侧打开常驻的采集抽屉。采集记录分为「视频」和「达人」两个标签，默认显示视频。视频按 `reels_id`（缺失时按 shortcode）更新；进入达人主页或其 Reels 标签页时，单独按 username 保存达人资料。两个列表分别支持分页、清空和导出；页面未提供的字段显示 `—`。
+Reel Insight is a Chrome extension built with **WXT, TypeScript, React, and shadcn/ui**. It simplifies Instagram data collection by automatically capturing Reels information, creator profiles, engagement metrics, and account details — all directly within your browser.
 
-达人记录包含头像、昵称、Instagram ID、username、帖子数、粉丝数、关注数、bio、bio 链接、认证状态，以及页面已提供的加入时间、账户所在地和认证时间。bio 链接在列表中只显示域名，可点复制图标复制完整网址；导出 Excel 时，这一列保存完整网址的 JSON 数组。再次采集同一达人时，完整的 bio 链接列表会替换旧列表。「自动采集达人资料」默认开启：进入达人主页时保存资料，并自动打开、关闭「账户简介」以读取后三个字段；关闭后进入主页不采集或保存达人资料。在「达人」标签仍可点击「采集达人」手动采集当前账号，不会开启自动采集。Instagram 未提供的值仍显示 `—`。
+Browse Instagram, collect data automatically, manage your records, and export everything to Excel with just a few clicks.
 
-抽屉右上角的「设置」提供中文/英文界面及导出列名，并分别控制三种自动采集。Reels 推荐页自动采集默认开启：上下切换视频时保存当前视频。达人 Reels 列表自动采集默认关闭：开启后会保存网格中已加载的链接、封面和作者，逐条打开新发现的 Reel 取得详情并返回列表。达人资料与达人 Reels 列表各有独立的「采集位置」，都可选择独立采集窗口或当前页，默认使用独立窗口。独立窗口采集达人资料后会自动关闭；采集 Reels 时处理完首条后切回来源页。采集页数默认 1 页，首次显示的网格算第 1 页，每次主动下拉后出现的新一批算下一页。达到页数上限或连续三次未发现新条目后停止主动滚动。独立窗口完成后自动关闭采集标签页，并在发起采集的 Instagram 页面显示完成消息。可在抽屉查看进度并停止，关闭开关也会停止任务。关闭自动列表采集时，仍可在「视频」标签点击「开始补全」手动补齐当前已加载条目的 Caption。
+## ✨ Features
 
-记录保存在当前浏览器的扩展本地存储中。记录表默认每页显示 10 条，可选择 5、10、50 或 100 条并翻页。点击「导出 Excel」可下载当前标签全部记录的 `.xlsx` 文件，列名和布尔值随当前语言切换；弹窗可选择导出后保留或清空当前标签记录，确认文件已保存后才会删除。也可单独点击「清空」。导出包含最近采集时间，视频的合作者与标记用户资料保存在各自的 JSON 单元格中。卸载扩展会删除本地记录。
+### 🎬 Instagram Reels Collection
 
-## 开发
+Collect Instagram Reels data while browsing.
+
+- **Automatic Reels Collection** — Capture Reels as you scroll through the Instagram Reels feed.
+- **Creator Reels Collection** — Automatically discover and collect Reels from a creator's profile.
+- **Detailed Reel Information** — Extract available video information, captions, and engagement metrics.
+- **Caption Enrichment** — Retrieve additional details for previously discovered Reels.
+- **Duplicate Prevention** — Automatically update existing records using `reels_id`, or shortcode when the ID is unavailable.
+- **Collection Progress** — Monitor active collection tasks and stop them at any time.
+
+### 👤 Instagram Creator Profiles
+
+Collect detailed creator information directly from Instagram profiles.
+
+Supported fields include:
+
+| Field | Description |
+|-------|-------------|
+| Avatar | Creator profile picture |
+| Display Name | Creator's Instagram display name |
+| Instagram ID | Unique Instagram account identifier |
+| Username | Instagram username |
+| Posts | Total number of posts |
+| Followers | Follower count |
+| Following | Following count |
+| Biography | Profile biography |
+| Bio Links | External links listed in the profile |
+| Verified | Account verification status |
+| Date Joined | Account creation date, when available |
+| Account Location | Account location, when available |
+| Date Verified | Verification date, when available |
+
+**Automatic Profile Collection**
+
+When enabled, Reel Insight automatically collects creator information when you visit an Instagram profile.
+
+It can also open the **About This Account** section to retrieve additional information, including the account's join date, location, and verification date.
+
+The section is automatically closed after collection.
+
+Automatic creator collection is enabled by default and can be disabled in Settings.
+
+You can also manually collect the current creator by clicking **Collect Creator** in the Creators tab, without enabling automatic collection.
+
+Creator records are identified by username. Collecting the same creator again updates the existing record, including replacing the previous list of bio links.
+
+### ⚡ Automated Collection
+
+Reel Insight supports multiple collection workflows.
+
+#### Reels Feed Collection
+
+**Enabled by default**
+
+Automatically captures the current Reel as you navigate through the Instagram Reels feed.
+
+#### Creator Reels Collection
+
+**Disabled by default**
+
+When enabled, the extension can:
+
+1. Detect Reels available in a creator's profile grid.
+2. Collect loaded Reel links, thumbnails, and creator information.
+3. Open newly discovered Reels individually.
+4. Extract additional video details.
+5. Return to the creator's Reels list.
+6. Continue collecting until the configured limit is reached.
+
+Collection supports two execution modes:
+
+- **Separate Window** — Perform collection in a dedicated browser window.
+- **Current Tab** — Collect data directly in the current browser tab.
+
+Both creator profile collection and creator Reels collection have independent execution-mode settings.
+
+The separate-window mode is selected by default.
+
+When collecting creator profiles, the dedicated window closes automatically after collection.
+
+When collecting Reels, the extension returns focus to the originating page after processing the first Reel. The collection tab closes automatically when the task finishes.
+
+#### Collection Limits
+
+Control how many pages of Reels to collect.
+
+- Default limit: **1 page**
+- The initially loaded grid counts as the first page.
+- Each newly loaded batch after scrolling counts as an additional page.
+- Collection stops when the page limit is reached.
+- Collection also stops after three consecutive scroll attempts without discovering new items.
+
+You can monitor collection progress in the extension drawer and stop an active task at any time.
+
+Disabling the corresponding automatic collection setting also stops its active task.
+
+When automatic creator Reels collection is disabled, you can still manually enrich the currently loaded Reels by clicking **Start Enrichment** in the Videos tab.
+
+### 📊 Data Management
+
+Manage collected records through a persistent side drawer integrated into Instagram.
+
+The interface provides two independent tabs:
+
+- **Videos** — Manage collected Instagram Reels.
+- **Creators** — Manage collected Instagram creator profiles.
+
+The Videos tab is displayed by default.
+
+Available features include:
+
+- Browse collected records.
+- View detailed information.
+- Automatically update existing records.
+- Navigate through paginated results.
+- Change the number of records displayed per page.
+- Clear individual datasets.
+- Export records to Excel.
+
+**Pagination options:** 5, 10, 50, or 100 records per page.
+
+The default page size is **10 records**.
+
+Unavailable information is displayed as `—` rather than estimated or fabricated.
+
+### 📥 Excel Export
+
+Export your collected Instagram data to `.xlsx` files for further analysis.
+
+- Export all records from the currently selected tab.
+- Export Reels and creator records independently.
+- Automatically localize column headers based on the selected language.
+- Localize Boolean values in exported files.
+- Include the latest collection timestamp.
+- Preserve structured data in JSON-formatted cells.
+- Choose whether to keep or clear records after exporting.
+
+For creator records, bio links are displayed as domains in the interface.
+
+Click the copy icon to copy the complete URL.
+
+When exporting to Excel, the full list of bio links is preserved as a JSON array.
+
+For Reels, collaborator and tagged-user information is also stored in separate JSON-formatted cells.
+
+**Data Safety**
+
+Records are deleted after export only when the user explicitly chooses to clear them and the exported file has been confirmed as saved.
+
+You can also clear records manually without exporting.
+
+### 🌍 Multilingual Interface
+
+Reel Insight supports:
+
+- 🇺🇸 English
+- 🇨🇳 Simplified Chinese
+
+Language preferences apply to both the extension interface and Excel export column names.
+
+### 🔒 Local Data Storage
+
+All collected records are stored locally using the browser extension's storage.
+
+- No external database is required.
+- Records remain available across browser sessions.
+- Video and creator records are managed separately.
+- Uninstalling the extension removes its locally stored records.
+
+> **Note:** Export important records before uninstalling the extension.
+
+## 🚀 Getting Started
+
+### Requirements
+
+- Google Chrome or another compatible Chromium-based browser
+- Node.js and npm
+
+### Development
+
+Clone the repository:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/reel-insight-extension.git
+cd reel-insight-extension
+```
+
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Start the development server:
+
+```bash
 npm run dev
 ```
 
-首次开发时，在 Chrome 的 `chrome://extensions` 开启「开发者模式」，点击「加载已解压的扩展程序」，选择 `.output/chrome-mv3-dev`。保持开发命令运行即可自动重新构建。
+### Install in Chrome
 
-## 构建与安装
+1. Open Chrome and navigate to `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the following directory:
+
+   ```text
+   .output/chrome-mv3-dev
+   ```
+
+5. Open Instagram and navigate to a Reel or creator profile.
+
+Keep the development server running to enable automatic rebuilds during development.
+
+## 📖 How to Use
+
+### Open Reel Insight
+
+Navigate to Instagram and open:
+
+- A Reel detail page.
+- A creator's profile.
+- A creator's Reels tab.
+
+Click the floating Reel Insight button or the extension icon to open the persistent collection drawer on the right side of the page.
+
+### Collect Reels
+
+Visit the Instagram Reels feed.
+
+With automatic Reels collection enabled, the extension captures Reel information as you navigate between videos.
+
+Collected records appear in the **Videos** tab.
+
+### Collect Creator Profiles
+
+Visit an Instagram creator's profile.
+
+With automatic creator collection enabled, the extension captures available profile information and retrieves additional account details when accessible.
+
+You can also manually collect the current profile from the **Creators** tab.
+
+### Collect a Creator's Reels
+
+1. Open a creator's Reels tab.
+2. Enable **Automatic Creator Reels Collection** in Settings.
+3. Configure the collection mode and page limit.
+4. Allow the extension to discover and process Reels.
+5. Monitor progress in the collection drawer.
+
+### Export Data
+
+1. Open the Reel Insight drawer.
+2. Select the **Videos** or **Creators** tab.
+3. Click **Export Excel**.
+4. Choose whether to keep or clear the records after export.
+5. Save the generated `.xlsx` file.
+
+## ⚙️ Settings
+
+Access Settings from the upper-right corner of the collection drawer.
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Language | Interface and Excel export language | — |
+| Auto Collect Reels | Collect videos while browsing the Reels feed | Enabled |
+| Auto Collect Creators | Collect creator profiles automatically | Enabled |
+| Auto Collect Creator Reels | Collect Reels from creator profile grids | Disabled |
+| Creator Collection Mode | Separate Window / Current Tab | Separate Window |
+| Creator Reels Collection Mode | Separate Window / Current Tab | Separate Window |
+| Collection Page Limit | Maximum number of Reel grid batches to collect | 1 |
+
+## 🛠️ Tech Stack
+
+Reel Insight is built with modern browser extension technologies.
+
+| Technology | Purpose |
+|------------|---------|
+| WXT | Browser extension framework |
+| TypeScript | Type-safe application development |
+| React | User interface |
+| shadcn/ui | UI components |
+| Tailwind CSS | Styling |
+| Chrome Extension Manifest V3 | Browser extension platform |
+| Excel (.xlsx) | Structured data export |
+
+## 📦 Build
+
+Run type checking:
 
 ```bash
 npm run typecheck
+```
+
+Run tests:
+
+```bash
 npm test
+```
+
+Create a production build:
+
+```bash
 npm run build
 ```
 
-生产构建位于 `.output/chrome-mv3`，也可以在 `chrome://extensions` 中作为已解压扩展加载。扩展安装或更新后请刷新 Instagram 页面，再打开 Reel。插件图标在当前页面尚无内容脚本时会打开独立记录页；刷新 Instagram 页面后即可使用抽屉。Instagram 的页面数据结构会变化，部分数字可能没有公开，扩展不会估算缺失值。
+The production extension will be generated in:
 
-## 项目结构
+```text
+.output/chrome-mv3
+```
 
-- `entrypoints/`：WXT 入口，启动内容脚本、记录页和后台操作。
-- `src/content/`：页面接口响应监听、DOM 读取、悬浮按钮及抽屉控制。
-- `src/reel/`：数据类型、Instagram 响应解析、文案实体提取与记录合并。
-- `src/popup/`：React 数据读取 hook、记录表、详情、Excel 导出与 Tailwind 样式。
-- `src/components/ui/`：通过 shadcn/ui CLI 加入的本地组件；生成配置见 `components.json`。
-- `tests/`：解析与跨世界数据校验。
+To install the production build:
 
-开发约定见根目录的 `AGENTS.md`。
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Click **Load unpacked**.
+4. Select `.output/chrome-mv3`.
+
+After installing or updating the extension, refresh any open Instagram pages before using Reel Insight.
+
+If the extension's content script is not yet available on the current page, clicking its icon opens a standalone records page instead.
+
+## 📁 Project Structure
+
+```text
+.
+├── entrypoints/          # WXT entrypoints and background operations
+├── src/
+│   ├── content/          # Instagram data listeners, DOM extraction,
+│   │                     # floating button, and drawer controller
+│   ├── reel/             # Data models, Instagram response parsing,
+│   │                     # caption extraction, and record merging
+│   ├── popup/            # React hooks, record tables, details,
+│   │                     # Excel export, and Tailwind styles
+│   └── components/
+│       └── ui/           # shadcn/ui components
+├── tests/                # Parser and cross-world data validation tests
+├── components.json       # shadcn/ui configuration
+└── AGENTS.md             # Development guidelines
+```
+
+## ⚠️ Limitations
+
+Reel Insight depends on information made available by Instagram.
+
+Please note:
+
+- Instagram may change its website structure or API responses without notice.
+- Some engagement metrics and account information may not be publicly available.
+- Certain fields may be unavailable depending on the account, content, or page.
+- Missing values are displayed as `—`.
+- The extension does not estimate unavailable metrics.
+- Instagram pages may need to be refreshed after installing or updating the extension.
+
+## 🤝 Contributing
+
+Contributions, bug reports, and feature suggestions are welcome.
+
+If you discover an issue or have an idea for improving Reel Insight, feel free to open a GitHub Issue or submit a Pull Request.
+
+Please refer to `AGENTS.md` for development guidelines.
+
+---
+
+**Reel Insight** — Collect Instagram Reels and creator data, all from your browser.
