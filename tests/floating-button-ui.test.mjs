@@ -44,6 +44,7 @@ let readerState = 'ready';
 let code = 'ABC123';
 const messages = [];
 const opened = [];
+const saved = [];
 const body = new Element('body');
 const clickEvent = {
   /** 模拟取消拖动后的合成点击。 */
@@ -76,7 +77,12 @@ try {
   globalThis.innerWidth = 800;
   globalThis.innerHeight = 600;
   globalThis.browser = { storage: {
-    local: { /** 返回默认界面语言。 */ async get() { return {}; } },
+    local: {
+      /** 返回上次保存的悬浮按钮位置。 */
+      async get() { return { floatingButtonPosition: { left: 620, top: 532 } }; },
+      /** 记录拖动后写入的位置。 */
+      async set(value) { saved.push(value); },
+    },
     onChanged: { /** 测试中不切换语言。 */ addListener() {}, /** 清理语言监听器。 */ removeListener() {} },
   }, runtime: {
     /** 记录打开详情的请求。 */
@@ -98,6 +104,9 @@ try {
   }
   startFloatingButton(readReel, tabId => opened.push(tabId));
   assert.equal(button.dataset.state, 'ready');
+  await new Promise(setImmediate);
+  assert.equal(button.style.left, '620px', '启动后应用上次保存的位置');
+  assert.equal(button.style.top, '532px', '启动后应用上次保存的位置');
 
   button.fire('pointerdown', { button: 0, pointerId: 1, clientX: 700, clientY: 550 });
   button.fire('pointermove', { pointerId: 1, clientX: 500, clientY: 300 });
@@ -105,6 +114,7 @@ try {
   button.fire('click', clickEvent);
   assert.equal(button.style.left, '420px');
   assert.equal(button.style.top, '282px');
+  assert.deepEqual(saved.at(-1), { floatingButtonPosition: { left: 420, top: 282 } }, '拖动结束后保存位置');
   assert.equal(messages.length, 0, '拖动结束不能误打开详情');
 
   button.fire('click', clickEvent);

@@ -235,6 +235,8 @@ Navigate to Instagram and open:
 
 Click the floating Reel Insight button or the extension icon to open the persistent collection drawer on the right side of the page.
 
+Drag the floating button anywhere in the viewport to reposition it. The position is stored locally and restored after a page refresh.
+
 ### Collect Reels
 
 Visit the Instagram Reels feed.

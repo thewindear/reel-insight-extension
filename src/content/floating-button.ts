@@ -4,6 +4,10 @@ import { defaultSettings, settingsFrom } from '../reel/settings.ts';
 import { profileUsername } from '../reel/profile-url.ts';
 
 type CaptureState = 'loading' | 'ready' | 'paused' | 'error' | 'profile';
+type ButtonPosition = { left: number; top: number };
+
+// 悬浮按钮位置保存在扩展本地存储中，刷新页面后仍能回到上次拖动的位置。
+const buttonPositionKey = 'floatingButtonPosition';
 
 const buttonStyle = `
   :host { all: initial; }
@@ -40,6 +44,13 @@ export function captureState(readReel: () => ReelReply, code: string): CaptureSt
   }
 }
 
+/** 校验存储中的悬浮按钮位置，非有限数字的坐标一律忽略。 */
+export function buttonPositionFrom(value: unknown): ButtonPosition | null {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return typeof raw.left === 'number' && Number.isFinite(raw.left) && typeof raw.top === 'number' && Number.isFinite(raw.top)
+    ? { left: raw.left, top: raw.top } : null;
+}
+
 /** 在 Reel 详情与达人主页显示悬浮按钮，并允许点击打开常驻抽屉。 */
 export function startFloatingButton(readReel: () => ReelReply, openDrawer: (tabId: number) => void, signal?: AbortSignal): void {
   let host: HTMLDivElement | null = null;
@@ -64,6 +75,13 @@ export function startFloatingButton(readReel: () => ReelReply, openDrawer: (tabI
   void browser.storage.local.get('settings').then(stored => {
     language = settingsFrom(stored.settings).language;
     update();
+  }).catch(() => {});
+  // 读取上次拖动后保存的位置，按钮未挂载时先记下，挂载时再应用。
+  void browser.storage.local.get(buttonPositionKey).then(stored => {
+    const saved = buttonPositionFrom(stored[buttonPositionKey]);
+    if (!saved) return;
+    position = saved;
+    if (button) place(saved.left, saved.top);
   }).catch(() => {});
 
   /** 只在 Reel 详情地址上读取 shortcode。 */
@@ -107,7 +125,8 @@ export function startFloatingButton(readReel: () => ReelReply, openDrawer: (tabI
   /** 拖动结束后屏蔽这一次由指针释放产生的点击。 */
   function onPointerEnd(event: PointerEvent): void {
     if (!drag || event.pointerId !== drag.pointerId) return;
-    if (drag.moved && event.type === 'pointerup') {
+    const moved = drag.moved;
+    if (moved && event.type === 'pointerup') {
       suppressClick = true;
       /** 没有生成 click 时也要恢复下次正常点击。 */
       function resetClick(): void { suppressClick = false; }
@@ -115,6 +134,8 @@ export function startFloatingButton(readReel: () => ReelReply, openDrawer: (tabI
     }
     drag = null;
     if (button) delete button.dataset.dragging;
+    // 只在真正拖动后写入，避免点击时反复覆盖正确位置。
+    if (moved && position) void browser.storage.local.set({ [buttonPositionKey]: position }).catch(() => {});
   }
 
   /** 拖动后的合成点击只负责结束拖动，其余点击打开抽屉。 */

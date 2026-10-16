@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { captureState } from '../src/content/floating-button.ts';
+import { captureState, buttonPositionFrom } from '../src/content/floating-button.ts';
 
 /** 模拟当前 Reel 已取得数据。 */
 function readyReader() { return { status: 'ready', reel: { code: 'ABC123' } }; }
@@ -13,4 +13,10 @@ assert.equal(captureState(() => ({ status: 'ready', reel: { code: 'ABC123' }, au
 assert.equal(captureState(readyReader, 'NEXT456'), 'loading');
 assert.equal(captureState(loadingReader, 'ABC123'), 'loading');
 assert.equal(captureState(failingReader, 'ABC123'), 'error');
+assert.deepEqual(buttonPositionFrom({ left: 120, top: 90 }), { left: 120, top: 90 });
+assert.equal(buttonPositionFrom({ left: '120', top: 90 }), null);
+assert.equal(buttonPositionFrom({ left: Number.NaN, top: 90 }), null);
+assert.equal(buttonPositionFrom({ left: 120 }), null);
+assert.equal(buttonPositionFrom(null), null);
+assert.equal(buttonPositionFrom([1, 2]), null);
 console.log('Floating button status checks passed');
