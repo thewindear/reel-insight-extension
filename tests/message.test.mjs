@@ -25,7 +25,7 @@ const document = {
   querySelectorAll() { return scripts; },
 };
 const context = {
-  exports: {}, document, Event, AbortController, location: { pathname: '/creator/reels/', href: 'https://www.instagram.com/reels/' },
+  exports: {}, URLSearchParams, document, Event, AbortController, location: { pathname: '/creator/reels/', href: 'https://www.instagram.com/reels/' },
   /** 由测试手动触发读取，无需真正启动后台定时器。 */
   setInterval(callback) { poll = callback; return 1; },
   browser: { storage: {
@@ -58,7 +58,7 @@ const context = {
       profileFromPageEvent: () => null };
     if (name === '../reel/profile-url') return { /** 仅将测试中的主页视为当前达人。 */
       profileUsername: url => url === 'https://www.instagram.com/creator/' ? 'creator' : null };
-    if (name === './page') return { readActiveReel: () => current,
+    if (name === './page') return { readFeedAuthor: () => null, readActiveReel: () => current,
       /** 只在当前达人主页提供资料。 */
       readProfilePage: () => context.location.pathname === '/creator/' ? profile : null,
       readProfileReels: () => profileReels,

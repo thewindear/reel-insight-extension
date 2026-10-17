@@ -1,3 +1,4 @@
+import { settingsFrom } from '../src/reel/settings';
 import { profileUsername } from '../src/reel/profile-url';
 
 /** 校验打开请求来自当前 Instagram Reel，并返回其 shortcode。 */
@@ -52,19 +53,40 @@ export default defineBackground(() => {
       void action.then(() => sendResponse({ saved: true }), () => sendResponse({ saved: false }));
       return true;
     }
+    if (message?.type === 'CANCEL_REEL_PLAYS' || message?.type === 'CANCEL_FEED_PROFILE') {
+      const tabId = sender.tab?.id;
+      if (sender.id !== browser.runtime.id || typeof tabId !== 'number' || !sender.url?.startsWith('https://www.instagram.com/')) return;
+      const key = `${message.type === 'CANCEL_FEED_PROFILE' ? 'profileWorker' : 'reelPlaysWorker'}:${tabId}`;
+      void browser.storage.session.get(key).then(async stored => {
+        const binding = stored[key] as { tabId?: unknown; feedProfile?: unknown; nextPlaysCode?: unknown } | undefined;
+        if (message.type === 'CANCEL_FEED_PROFILE' && binding?.feedProfile !== true) { sendResponse({ accepted: false }); return; }
+        if (typeof binding?.tabId === 'number') await browser.tabs.remove(binding.tabId).catch(() => {});
+        sendResponse({ accepted: true });
+      }).catch(() => sendResponse({ accepted: false }));
+      return true;
+    }
     if (message?.type === 'OPEN_PROFILE_WORKER') {
       const tabId = sender.tab?.id;
       const profile = typeof message.url === 'string' ? profileUsername(message.url) : null;
       if (sender.id !== browser.runtime.id || typeof tabId !== 'number' ||
         !sender.url?.startsWith('https://www.instagram.com/') ||
         !profile || message.profile !== profile ||
-        (message.target !== 'profile' && message.target !== 'reels') ||
+        (message.target !== 'profile' && message.target !== 'reels' && message.target !== 'plays') ||
+        (message.feedProfile === true && message.target !== 'profile') ||
+        (message.playsCode !== undefined && (message.feedProfile !== true || typeof message.playsCode !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(message.playsCode))) ||
+        (message.target === 'plays' && (typeof message.code !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(message.code))) ||
         new URL(message.url).searchParams.has('ig_plugin_worker')) return;
-      const key = `profileWorker:${tabId}`;
+      const key = `${message.target === 'plays' ? 'reelPlaysWorker' : 'profileWorker'}:${tabId}`;
       // 先让采集页成为活动页面，待资料保存或首批 Reel 开始处理后再切回来源页。
       void browser.storage.session.get(key).then(async stored => {
-        const previous = stored[key] as { tabId?: unknown; windowId?: unknown; profile?: unknown; target?: unknown } | undefined;
-        if (previous?.profile === profile && previous.target === message.target && typeof previous.tabId === 'number' &&
+        if (message.target === 'plays') {
+          const data = await browser.storage.local.get('reels');
+          const records = Array.isArray(data.reels) ? data.reels as SavedReel[] : [];
+          if (!records.some(row => row.code === message.code && row.plays === null &&
+            row.authors[0]?.username.toLowerCase() === profile.toLowerCase())) throw new Error('Missing collected Reel');
+        }
+        const previous = stored[key] as { tabId?: unknown; windowId?: unknown; profile?: unknown; target?: unknown; code?: unknown; feedProfile?: unknown; nextPlaysCode?: unknown } | undefined;
+        if (previous?.profile === profile && previous.target === message.target && previous.code === message.code && Boolean(previous.feedProfile) === (message.feedProfile === true) && typeof previous.tabId === 'number' &&
           typeof previous.windowId === 'number' &&
           await browser.tabs.get(previous.tabId).then(() => true, () => false)) return previous.tabId;
         if (typeof previous?.tabId === 'number') {
@@ -72,7 +94,7 @@ export default defineBackground(() => {
           await browser.storage.session.remove(`profileWorkerTab:${previous.tabId}`);
         }
         const window = await browser.windows.create({
-          url: `https://www.instagram.com/${profile}/${message.target === 'reels' ? 'reels/' : ''}?ig_plugin_worker=1`, focused: true,
+          url: `https://www.instagram.com/${profile}/${message.target === 'profile' && !message.playsCode ? '' : 'reels/'}?ig_plugin_worker=1${message.target === 'plays' ? `&ig_plugin_plays=${encodeURIComponent(message.code)}` : ''}${message.feedProfile === true ? '&ig_plugin_feed_profile=1' : ''}${message.playsCode ? `&ig_plugin_profile_plays=${encodeURIComponent(message.playsCode)}` : ''}`, focused: true,
         });
         if (typeof window?.id !== 'number') throw new Error('Missing worker window ID');
         const [worker] = await browser.tabs.query({ windowId: window.id, active: true });
@@ -81,8 +103,8 @@ export default defineBackground(() => {
           throw new Error('Missing worker tab ID');
         }
         await browser.storage.session.set({
-          [key]: { tabId: worker.id, windowId: window.id, profile, target: message.target },
-          [`profileWorkerTab:${worker.id}`]: { sourceTabId: tabId, profile },
+          [key]: { tabId: worker.id, windowId: window.id, profile, target: message.target, ...(message.feedProfile === true ? { feedProfile: true, ...(message.playsCode ? { nextPlaysCode: message.playsCode } : {}) } : {}), ...(message.target === 'plays' ? { code: message.code } : {}) },
+          [`profileWorkerTab:${worker.id}`]: { sourceTabId: tabId, profile, ...(message.feedProfile === true ? { feedProfile: true, ...(message.playsCode ? { nextPlaysCode: message.playsCode } : {}) } : {}), ...(message.target === 'plays' ? { code: message.code } : {}) },
         });
         return worker.id;
       }).then(workerTabId => sendResponse({ tabId: workerTabId }), () => sendResponse({ error: true }));
@@ -110,25 +132,55 @@ export default defineBackground(() => {
       if (sender.id !== browser.runtime.id || typeof tabId !== 'number' ||
         !sender.url?.startsWith('https://www.instagram.com/') ||
         typeof message.profile !== 'string' ||
-        (message.kind !== undefined && message.kind !== 'profile' && message.kind !== 'cancelled') ||
+        (message.kind !== undefined && message.kind !== 'profile' && message.kind !== 'cancelled' && message.kind !== 'plays') ||
+        ((message.kind === 'plays' || message.plays !== undefined) && message.plays !== null && (!Number.isSafeInteger(message.plays) || message.plays < 0)) ||
         !counts || ![counts.completed, counts.total, counts.failed].every(value => Number.isSafeInteger(value) && value >= 0)) return;
       const reverseKey = `profileWorkerTab:${tabId}`;
-      void browser.storage.session.get(reverseKey).then(stored => {
-        const binding = stored[reverseKey] as { sourceTabId?: unknown; profile?: unknown } | undefined;
+      void browser.storage.session.get(reverseKey).then(async stored => {
+        const binding = stored[reverseKey] as { sourceTabId?: unknown; profile?: unknown; code?: unknown; feedProfile?: unknown; nextPlaysCode?: unknown } | undefined;
         if (!binding || binding.profile !== message.profile || typeof binding.sourceTabId !== 'number') {
           sendResponse({ accepted: false });
           return;
         }
+        if (message.kind === 'plays' && typeof binding.code !== 'string' ||
+          typeof binding.code === 'string' && message.kind !== 'plays' && message.kind !== 'cancelled') {
+          sendResponse({ accepted: false }); return;
+        }
         const sourceTabId = binding.sourceTabId;
+        let filled = false;
+        const targetCode = message.kind === 'plays' ? binding.code :
+          binding.feedProfile === true && message.kind === 'profile' ? binding.nextPlaysCode : undefined;
+        if (typeof targetCode === 'string' && message.plays !== null && message.plays !== undefined) {
+          // 只更新绑定目标的已有记录；串行写入避免覆盖同时到来的数据或恢复已清空记录。
+          const action = storageQueue.then(async () => {
+            const stored = await browser.storage.local.get(['reels', 'settings']);
+            const settings = settingsFrom(stored.settings);
+            if (!settings.autoFeed || !settings.autoFeedPlays) return;
+            const records = Array.isArray(stored.reels) ? stored.reels as SavedReel[] : [];
+            const target = records.find(row => row.code === targetCode &&
+              row.authors[0]?.username.toLowerCase() === String(binding.profile).toLowerCase());
+            if (!target || target.plays !== null) return;
+            await browser.storage.local.set({ reels: records.map(row => row === target ?
+              { ...row, plays: message.plays, savedAt: new Date().toISOString() } : row) });
+            filled = true;
+          });
+          storageQueue = action.then(() => {}, () => {});
+          await action;
+        }
         sendResponse({ accepted: true });
-        const notice = message.kind === 'cancelled' ? Promise.resolve() : browser.tabs.sendMessage(sourceTabId, {
+        const notice = binding.feedProfile === true ? browser.tabs.sendMessage(sourceTabId, {
+          type: 'FEED_PROFILE_COMPLETE', profile: binding.profile,
+          ...(typeof binding.nextPlaysCode === 'string' ? { completedPlaysCode: binding.nextPlaysCode } : {}),
+        }).catch(() => {}) : typeof binding.code === 'string' ? browser.tabs.sendMessage(sourceTabId, {
+          type: 'REEL_PLAYS_COMPLETE', code: binding.code, filled,
+        }).catch(() => {}) : message.kind === 'cancelled' ? Promise.resolve() : browser.tabs.sendMessage(sourceTabId, {
           type: 'PROFILE_COLLECTION_COMPLETE', profile: binding.profile,
           progress: { completed: counts.completed, total: counts.total, failed: counts.failed },
           ...(message.kind === 'profile' ? { kind: 'profile' } : {}),
         }).catch(() => {});
         void notice.then(async () => {
           await browser.tabs.remove(tabId).catch(() => {});
-          const sourceKey = `profileWorker:${sourceTabId}`;
+          const sourceKey = `${typeof binding.code === 'string' ? 'reelPlaysWorker' : 'profileWorker'}:${sourceTabId}`;
           const current = (await browser.storage.session.get(sourceKey))[sourceKey] as { tabId?: unknown } | undefined;
           await browser.storage.session.remove(current?.tabId === tabId ? [sourceKey, reverseKey] : reverseKey);
         }).catch(() => {});
@@ -147,6 +199,21 @@ export default defineBackground(() => {
     sendResponse({ tabId: tab.id });
   };
   browser.runtime.onMessage.addListener(onMessage);
+
+  /** 用户关闭补播放数窗口时解除来源页等待，并清理该窗口的任务绑定。 */
+  browser.tabs.onRemoved?.addListener(tabId => {
+    const reverseKey = `profileWorkerTab:${tabId}`;
+    void browser.storage.session.get(reverseKey).then(async stored => {
+      const binding = stored[reverseKey] as { sourceTabId?: unknown; code?: unknown; profile?: unknown; feedProfile?: unknown; nextPlaysCode?: unknown } | undefined;
+      if (typeof binding?.sourceTabId !== 'number' || typeof binding.code !== 'string' && binding.feedProfile !== true) return;
+      await browser.tabs.sendMessage(binding.sourceTabId, binding.feedProfile === true ?
+        { type: 'FEED_PROFILE_COMPLETE', profile: binding.profile } :
+        { type: 'REEL_PLAYS_COMPLETE', code: binding.code, filled: false }).catch(() => {});
+      const sourceKey = `${binding.feedProfile === true ? 'profileWorker' : 'reelPlaysWorker'}:${binding.sourceTabId}`;
+      const current = (await browser.storage.session.get(sourceKey))[sourceKey] as { tabId?: unknown } | undefined;
+      await browser.storage.session.remove(current?.tabId === tabId ? [sourceKey, reverseKey] : reverseKey);
+    }).catch(() => {});
+  });
 
   /** 插件图标打开当前 Instagram 页面抽屉；脚本尚未注入时打开独立记录页。 */
   browser.action.onClicked.addListener(tab => {

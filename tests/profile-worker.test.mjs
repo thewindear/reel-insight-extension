@@ -18,20 +18,26 @@ const finished = [];
 let aboutCalls = 0;
 
 /** 在测试地址中启动内容脚本，并暴露周期读取与页面资料读取次数。 */
-function start(pathname, search, settings) {
+function start(pathname, search, settings, grid = []) {
   const location = { pathname, search, href: `https://www.instagram.com${pathname}${search}` };
   const isWorker = Boolean(search);
   let poll;
   let settingsListener;
   let pageReads = 0;
+  let gridReads = 0;
+  let profileHidden = false;
+  let listener;
+  let now = 10000;
+  const events = new Map();
   const context = {
-    exports: {}, location, Event, AbortController, Date,
+    exports: {}, URLSearchParams, location, Event, AbortController, Date: { now: () => now },
     document: {
       readyState: 'complete',
-      /** 注册页面数据监听。 */ addEventListener() {},
+      /** 注册页面数据监听。 */ addEventListener(name, listener) { events.set(name, listener); },
       /** 请求页面已有缓存。 */ dispatchEvent() {},
       /** 本例没有内嵌 JSON。 */ querySelectorAll() { return []; },
     },
+    /** 页面等待完成时推进虚拟时间。 */ setTimeout(callback, milliseconds) { now += milliseconds; callback(); },
     /** 测试主动触发周期读取。 */ setInterval(callback) { poll = callback; return 1; },
     browser: {
       storage: {
@@ -40,7 +46,8 @@ function start(pathname, search, settings) {
       },
       runtime: {
         id: 'extension-id',
-        onMessage: { /** 本例不发送抽屉消息。 */ addListener() {} },
+        onMessage: { /** 保留记录页控制消息以检查任务隔离。 */ addListener(value) { listener = value; } },
+        /** 提供记录页来源地址。 */ getURL(path) { return `chrome-extension://extension-id${path}`; },
         /** 记录从来源页或采集窗口发出的请求。 */
         async sendMessage(message) {
           if (message.type === 'OPEN_PROFILE_WORKER') { opened.push(message); return { tabId: 11 }; }
@@ -55,13 +62,13 @@ function start(pathname, search, settings) {
     require(name) {
       if (name === '../reel/settings') return { defaultSettings, settingsFrom };
       if (name === '../reel/profile-url') return { profileUsername };
-      if (name === '../reel/extract') return { mergeProfiles,
+      if (name === '../reel/extract') return { mergeProfiles, profileFromPageEvent: value => value,
         /** 本例没有 Reel 网络响应。 */ findReels: () => [],
         /** 本例没有达人网络响应。 */ findProfile: () => null };
-      if (name === './page') return {
+      if (name === './page') return { readFeedAuthor: () => null,
         /** 记录是否在来源页读取了达人 DOM。 */
-        readProfilePage: () => { pageReads++; return base; },
-        /** 本例仅采集达人资料。 */ readProfileReels: () => [],
+        readProfilePage: () => { pageReads++; return profileHidden ? null : base; },
+        /** 本例仅采集达人资料。 */ readProfileReels: () => { gridReads++; return grid; },
         /** 本例没有当前 Reel。 */ readActiveReel: () => null,
         /** 模拟账户简介补全。 */
         collectProfileAbout: async () => { aboutCalls++; return { ...base, joinedAt: '2024年12月', basedIn: '美国' }; },
@@ -71,7 +78,16 @@ function start(pathname, search, settings) {
   };
   runInNewContext(compiled, context);
   context.exports.startReelReader();
-  return { /** 触发内容脚本读取。 */ poll: () => poll(), /** 查看达人 DOM 读取次数。 */ pageReads: () => pageReads,
+  return { /** 模拟滚动后主页头部被虚拟化移除。 */ hideProfile: () => { profileHidden = true; },
+    /** 检查资料任务是否尝试读取视频网格。 */ gridReads: () => gridReads,
+    /** 从本扩展记录页发起批量补全请求。 */ request: type => {
+      let reply;
+      listener({ type }, { id: 'extension-id', url: 'chrome-extension://extension-id/viewer.html' }, value => { reply = value; });
+      return reply;
+    },
+    /** 推进资料稳定等待时间。 */ advance: milliseconds => { now += milliseconds; },
+    /** 模拟主页接口返回完整资料。 */ profile: value => events.get('instagram-plugin:profile')({ detail: value }),
+    /** 触发内容脚本读取。 */ poll: () => poll(), /** 查看达人 DOM 读取次数。 */ pageReads: () => pageReads,
     /** 模拟用户切换采集位置或开关。 */ changeSettings: next => settingsListener({ settings: { newValue: next } }, 'local') };
 }
 
@@ -160,3 +176,73 @@ await new Promise(setImmediate);
 oppositeWorker.poll();
 assert.equal(oppositeWorker.pageReads(), 0, 'Reels 专用窗口不得重复采集当前页模式的达人资料');
 console.log('Separate profile data window checks passed');
+
+// 推荐页打开的资料窗口必须采集完整主页字段，即使主页采集位置原本为当前页。
+const feedSettings = { autoFeed: true, autoFeedProfiles: true, autoProfileData: false, autoProfile: true,
+  profileDataMode: 'current-tab', profileMode: 'new-tab' };
+const feedDetails = start('/creator/', '?ig_plugin_worker=1&ig_plugin_feed_profile=1', feedSettings);
+await new Promise(setImmediate);
+const beforeFeedDone = finished.length;
+feedDetails.poll();
+await new Promise(setImmediate);
+feedDetails.profile({ ...base, biography: 'Complete bio', externalUrl: 'https://one.example/',
+  bioLinks: ['https://one.example/', 'https://two.example/'], bioLinksComplete: true });
+feedDetails.poll();
+await new Promise(setImmediate);
+assert.equal(finished.length, beforeFeedDone, '主页资料尚未稳定时不能提前关闭窗口');
+feedDetails.advance(2000);
+feedDetails.poll();
+await new Promise(setImmediate);
+assert.equal(saved.at(-1).profile.biography, 'Complete bio');
+assert.deepEqual(saved.at(-1).profile.bioLinks, ['https://one.example/', 'https://two.example/']);
+assert.equal(finished.length, beforeFeedDone + 1);
+assert.equal(finished.at(-1).kind, 'profile', '推荐页补全只能执行达人详情采集');
+
+const timedOutDetails = start('/creator/', '?ig_plugin_worker=1&ig_plugin_feed_profile=1', feedSettings);
+await new Promise(setImmediate);
+timedOutDetails.advance(30000);
+timedOutDetails.poll();
+await new Promise(setImmediate);
+assert.equal(finished.at(-1).kind, 'cancelled', '达人详情加载超时应关闭任务，不能永久阻塞推荐页');
+
+// 即使全局列表采集已开启，带推荐页资料任务标记的窗口也不能读取或启动列表采集。
+for (const profileMode of ['new-tab', 'current-tab']) {
+  const settings = { ...feedSettings, profileMode };
+  const beforeOpened = opened.length;
+  const isolated = start('/creator/reels/', '?ig_plugin_worker=1&ig_plugin_feed_profile=1', settings,
+    [{ code: 'SHOULD_NOT_COLLECT', authors: [{ username: 'creator' }], plays: 100 }]);
+  await new Promise(setImmediate);
+  isolated.poll();
+  await new Promise(setImmediate);
+  isolated.advance(2000);
+  isolated.poll();
+  await new Promise(setImmediate);
+  assert.equal(isolated.gridReads(), 0, '资料补全窗口不得读取、滚动或打开达人 Reels 网格');
+  assert.equal(isolated.request('START_PROFILE_ENRICHMENT').accepted, false, '资料任务不能通过消息切换为视频列表采集');
+  assert.equal(opened.length, beforeOpened, '资料任务不能再启动视频采集窗口');
+  assert.equal(settings.autoProfile, true, '隔离任务不能关闭用户的全局自动列表采集配置');
+  assert.equal(finished.at(-1).kind, 'profile');
+}
+
+// 资料与目标播放数从同一个 Reels 页面获取，不启动第二页或批量列表采集。
+const beforeCombinedDone = finished.length;
+const combinedWorker = start('/creator/reels/', '?ig_plugin_worker=1&ig_plugin_feed_profile=1&ig_plugin_profile_plays=TARGET',
+  { ...feedSettings, profilePages: 1 }, [{ code: 'TARGET', plays: 4567, authors: [{ username: 'creator' }] }]);
+await new Promise(setImmediate);
+combinedWorker.poll();
+await new Promise(setImmediate);
+combinedWorker.profile({ ...base, biography: 'Combined bio', bioLinks: ['https://combined.example/'], bioLinksComplete: true });
+combinedWorker.poll();
+await new Promise(setImmediate);
+combinedWorker.poll();
+await new Promise(setImmediate);
+combinedWorker.hideProfile();
+combinedWorker.advance(2000);
+combinedWorker.poll();
+await new Promise(setImmediate);
+assert.equal(finished.length, beforeCombinedDone + 1);
+assert.equal(finished.at(-1).kind, 'profile');
+assert.equal(finished.at(-1).plays, 4567);
+assert.equal(saved.at(-1).profile.biography, 'Combined bio');
+assert.deepEqual(saved.at(-1).profile.bioLinks, ['https://combined.example/']);
+assert.equal(combinedWorker.request('START_PROFILE_ENRICHMENT').accepted, false, '同页补播放数不代表允许采集整个列表');

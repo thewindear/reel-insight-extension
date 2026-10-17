@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { profileFromPageEvent, reelFromPageEvent } from '../src/reel/extract.ts';
+import { settingsFrom } from '../src/reel/settings.ts';
 import { profileUsername } from '../src/reel/profile-url.ts';
 
 const source = readFileSync(new URL('../entrypoints/background.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 let listener;
 let actionClick;
+let tabRemoved;
 let contentAvailable = true;
 const createdTabs = [];
 const workerWindows = [];
@@ -19,6 +21,7 @@ const session = new Map();
 const contentMessages = [];
 let stored = [];
 let storedProfiles = [];
+let storedSettings = {};
 const browser = {
   runtime: {
     id: 'extension-id',
@@ -35,7 +38,7 @@ const browser = {
       addListener(value) { actionClick = value; },
     },
   },
-  tabs: {
+  tabs: { onRemoved: { /** 保存窗口关闭通知，验证来源页不会一直等待。 */ addListener(callback) { tabRemoved = callback; } },
     /** 确认之前开启的采集标签页仍存在。 */
     async get(tabId) {
       if (tabId === 7) return { id: 7, windowId: 3 };
@@ -67,10 +70,10 @@ const browser = {
     /** 保存绑定以便后台休眠后复用。 */
     async set(value) { for (const [key, item] of Object.entries(value)) session.set(key, item); },
     /** 完成后删除来源与采集页绑定。 */
-    async remove(keys) { for (const key of keys) session.delete(key); },
+    async remove(keys) { for (const key of Array.isArray(keys) ? keys : [keys]) session.delete(key); },
   }, local: {
     /** 返回后台当前保存的记录。 */
-    async get() { return { reels: stored, profiles: storedProfiles }; },
+    async get() { return { reels: stored, profiles: storedProfiles, settings: storedSettings }; },
     /** 保存测试记录。 */
     async set(value) { if ('reels' in value) stored = value.reels; if ('profiles' in value) storedProfiles = value.profiles; },
     /** 清空测试记录。 */
@@ -80,6 +83,7 @@ const browser = {
 runInNewContext(compiled, { exports: {}, browser, URL, Promise, Date, defineBackground: callback => callback(),
   /** 注入真实的页面字段校验和最小记录合并逻辑。 */
   require(name) {
+    if (name === '../src/reel/settings') return { settingsFrom };
     if (name === '../src/reel/extract') return { reelFromPageEvent, profileFromPageEvent };
     if (name === '../src/reel/profile-url') return { profileUsername };
     if (name === '../src/reel/records') return { upsertProfile: (rows, profile, savedAt) =>
@@ -175,3 +179,104 @@ assert.equal(listener({ type: 'CLEAR_REELS' }, sender, () => {}), undefined);
 assert.equal((await open({ type: 'CLEAR_REELS' }, { id: 'extension-id', url: 'chrome-extension://extension-id/viewer.html' })).saved, true);
 assert.equal(stored.length, 0);
 console.log('Floating button open checks passed');
+
+// 定向补播放数必须绑定已采集视频及作者，不能新增预加载记录或改写其他字段。
+stored = [
+  { code: 'TARGET', authors: [{ username: 'creator' }], plays: null, caption: 'Keep caption', likes: 7, savedAt: 'before' },
+  { code: 'UNRELATED', authors: [{ username: 'creator' }], plays: 99, caption: 'Other', savedAt: 'before' },
+];
+const playsRequest = { type: 'OPEN_PROFILE_WORKER', target: 'plays', profile: 'creator', url: 'https://www.instagram.com/creator/', code: 'TARGET' };
+assert.equal((await open({ ...playsRequest, profile: 'other', url: 'https://www.instagram.com/other/' })).error, true, '不属于该作者的视频不能启动补全');
+assert.equal((await open({ ...playsRequest, code: 'UNKNOWN' })).error, true, '未采集视频不能启动补全');
+assert.equal((await open(playsRequest)).tabId, 10);
+assert.ok(workerWindows.at(-1).url.endsWith('/creator/reels/?ig_plugin_worker=1&ig_plugin_plays=TARGET'));
+assert.equal(session.get('profileWorkerTab:10').code, 'TARGET');
+const playsDone = { type: 'PROFILE_WORKER_DONE', kind: 'plays', profile: 'creator', plays: 12345, progress: { completed: 1, total: 1, failed: 0 } };
+assert.equal((await open({ ...playsDone, profile: 'other' }, workerSender)).accepted, false);
+assert.equal((await open({ ...playsDone, kind: 'profile' }, workerSender)).accepted, false, '补播放数窗口不能冒充批量采集完成');
+assert.equal((await open({ ...playsDone, code: 'UNRELATED' }, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(stored[0].plays, 12345, '仅更新后台绑定的 shortcode');
+assert.equal(stored[0].caption, 'Keep caption');
+assert.equal(stored[0].likes, 7);
+assert.equal(stored[1].plays, 99);
+assert.equal(stored.length, 2);
+assert.equal(contentMessages.at(-1).message.type, 'REEL_PLAYS_COMPLETE');
+assert.equal(contentMessages.at(-1).message.code, 'TARGET');
+assert.equal(contentMessages.at(-1).message.filled, true);
+assert.equal(session.has('reelPlaysWorker:7'), false);
+stored[0].plays = null;
+assert.equal((await open(playsRequest)).tabId, 10);
+stored = [];
+assert.equal((await open(playsDone, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(stored.length, 0, '补全完成时不得恢复用户已清空的记录');
+assert.equal(contentMessages.at(-1).message.filled, false);
+stored = [{ code: 'TARGET', authors: [{ username: 'creator' }], plays: null }];
+assert.equal((await open(playsRequest)).tabId, 10);
+stored[0].plays = 777;
+assert.equal((await open(playsDone, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(stored[0].plays, 777, '不得覆盖任务期间已经收到的播放数');
+console.log('Targeted plays window and update checks passed');
+
+stored[0].plays = null;
+assert.equal((await open(playsRequest)).tabId, 10);
+assert.equal(listener({ ...playsDone, plays: -1 }, workerSender, () => {}), undefined, '拒绝非法播放数');
+assert.equal(listener({ ...playsDone, plays: 1.2 }, workerSender, () => {}), undefined, '拒绝非整数播放数');
+tabRemoved(10);
+await new Promise(setImmediate);
+assert.equal(contentMessages.at(-1).message.type, 'REEL_PLAYS_COMPLETE');
+assert.equal(contentMessages.at(-1).message.filled, false, '手动关闭窗口也应解除来源页等待');
+assert.equal(session.has('reelPlaysWorker:7'), false);
+
+const feedProfileRequest = { type: 'OPEN_PROFILE_WORKER', target: 'profile', feedProfile: true, profile: 'creator', url: 'https://www.instagram.com/creator/' };
+assert.equal((await open(feedProfileRequest)).tabId, 10);
+assert.equal(workerWindows.at(-1).url, 'https://www.instagram.com/creator/?ig_plugin_worker=1&ig_plugin_feed_profile=1');
+const enriched = { ...profile, biography: 'Full biography', bioLinks: ['https://bio.example/', 'https://shop.example/'], bioLinksComplete: true };
+assert.equal((await open({ type: 'SAVE_PROFILE', profile: enriched, url: 'https://www.instagram.com/creator/' }, workerSender)).saved, true);
+assert.equal(storedProfiles.at(0).biography, 'Full biography');
+assert.deepEqual(storedProfiles.at(0).bioLinks, ['https://bio.example/', 'https://shop.example/']);
+assert.equal((await open(profileDone, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(contentMessages.at(-1).message.type, 'FEED_PROFILE_COMPLETE');
+assert.equal(contentMessages.at(-1).message.profile, 'creator');
+assert.equal(session.has('profileWorker:7'), false);
+assert.equal((await open(feedProfileRequest)).tabId, 10);
+tabRemoved(10);
+await new Promise(setImmediate);
+assert.equal(contentMessages.at(-1).message.type, 'FEED_PROFILE_COMPLETE', '手动关闭达人详情窗口也应恢复推荐页浏览');
+
+// 两项补全直接打开同一个 Reels 页面，采集结束不得再导航或创建窗口。
+stored = [{ code: 'COMBINED', authors: [{ username: 'creator' }], plays: null, caption: 'Keep combined' }];
+const combined = { ...feedProfileRequest, playsCode: 'COMBINED' };
+const beforeCombinedWindows = workerWindows.length;
+const beforeCombinedRemoved = removedTabs.length;
+const beforeCombinedNavigation = focusedTabs.length;
+assert.equal((await open(combined)).tabId, 10);
+assert.equal(workerWindows.at(-1).url, 'https://www.instagram.com/creator/reels/?ig_plugin_worker=1&ig_plugin_feed_profile=1&ig_plugin_profile_plays=COMBINED');
+assert.equal((await open({ ...profileDone, plays: 12345 }, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(workerWindows.length, beforeCombinedWindows + 1);
+assert.equal(focusedTabs.length, beforeCombinedNavigation, '两项补全之间不得整页导航或刷新');
+assert.equal(removedTabs.length, beforeCombinedRemoved + 1, '两项完成后只关闭一次窗口');
+assert.equal(stored[0].plays, 12345);
+assert.equal(stored[0].caption, 'Keep combined');
+assert.equal(contentMessages.at(-1).message.completedPlaysCode, 'COMBINED');
+assert.equal(session.has('profileWorker:7'), false);
+assert.equal(session.has('reelPlaysWorker:7'), false);
+// 关闭播放数补全后，组合任务的晚到结果不能写入播放数。
+stored[0].plays = null;
+assert.equal((await open(combined)).tabId, 10);
+storedSettings = { autoFeedPlays: false };
+assert.equal((await open({ ...profileDone, plays: 200 }, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(stored[0].plays, null);
+storedSettings = {};
+// 找不到目标视频也能完成达人任务，并解除来源页等待。
+assert.equal((await open(combined)).tabId, 10);
+assert.equal((await open({ ...profileDone, plays: null }, workerSender)).accepted, true);
+await new Promise(setImmediate);
+assert.equal(contentMessages.at(-1).message.completedPlaysCode, 'COMBINED');
+assert.equal(session.has('profileWorker:7'), false);
+console.log('Shared page profile and plays checks passed');

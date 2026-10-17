@@ -156,7 +156,8 @@ assert.equal(context.exports.readActiveReel().reel, null);
 metadata.set('meta[property="og:url"]', 'https://www.instagram.com/new.author/reel/NEWCODE/');
 /** 即使 meta 已切到新视频，旧视频自己的链接仍能阻止串数据。 */
 currentContainer.querySelector = () => ({ href: 'https://www.instagram.com/reel/DZaNr7gtNEI/' });
-assert.equal(context.exports.readActiveReel().reel, null);
+assert.equal(context.exports.readActiveReel().code, 'DZaNr7gtNEI', '推荐页优先确认仍在视口中的视频，不能套用新地址的编号');
+assert.equal(context.exports.readActiveReel().reel.mediaId, null, '地址与视频不一致时不能读取该地址的元信息');
 
 /** 模拟用户主页中已加载的 Reel 网格链接及封面。 */
 function gridLink(href, cover) {
@@ -192,7 +193,89 @@ profileHeader = {
   querySelector() { return null; },
 };
 assert.equal(context.exports.readProfilePage().username, 'ujual');
+assert.equal(context.exports.readProfilePage().bioLinksComplete, false, '主页 DOM 未显示的链接不能当作已确认完整的空列表');
 location.href = 'https://www.instagram.com/other/';
 location.pathname = '/other/';
 assert.equal(context.exports.readProfilePage(), null, '旧的主页头部不能保存为新达人');
 console.log('Reel page metadata checks passed');
+
+let nextScrolls = 0;
+let containerScrolls = 0;
+const feedContainer = {
+  scrollHeight: 2400, clientHeight: 900, parentElement: null,
+  /** 记录推荐页容器的滚动距离。 */ scrollBy(options) { assert.equal(options.top, 900); containerScrolls++; },
+};
+const feedVideo = {
+  parentElement: feedContainer,
+  /** 当前视频占据主要视口。 */ getBoundingClientRect() { return { top: 0, bottom: 800, height: 800, width: 450 }; },
+};
+const nextVideo = {
+  /** 下一条视频已预加载但尚未进入视口。 */ getBoundingClientRect() { return { top: 900, bottom: 1700, height: 800, width: 450 }; },
+  /** 浏览时必须定位到下一条视频的中央。 */ scrollIntoView(options) { assert.equal(options.block, 'center'); nextScrolls++; },
+};
+videos.splice(0, videos.length, feedVideo, nextVideo);
+location.pathname = '/reels/';
+assert.equal(context.exports.advanceFeedReel(), true);
+assert.equal(nextScrolls, 1);
+assert.equal(containerScrolls, 0);
+videos.pop();
+assert.equal(context.exports.advanceFeedReel(), true);
+assert.equal(containerScrolls, 1, '没有预加载视频时只滚动所属容器');
+location.pathname = '/creator/reels/';
+assert.equal(context.exports.advanceFeedReel(), false, '达人列表不能被自动浏览');
+location.pathname = '/reel/DETAIL/';
+assert.equal(context.exports.advanceFeedReel(), false, '单条详情不能被自动浏览');
+location.pathname = '/reels/';
+videos.length = 0;
+assert.equal(context.exports.advanceFeedReel(), false, '没有当前视频不能盲目滚动');
+
+// 滚动到下一条时 URL 和 meta 保留旧值，仍应从无 article 的当前视频容器识别新作者。
+location.pathname = '/reels/OLDCODE/';
+location.href = 'https://www.instagram.com/reels/OLDCODE/';
+metadata.set('meta[property="og:url"]', location.href);
+let visibleCode = 'NEWCODE';
+let visibleAuthor = 'new.creator';
+const scope = {
+  tagName: 'DIV', parentElement: { tagName: 'MAIN' },
+  /** 单条视频容器不能跨到相邻推荐视频。 */ querySelectorAll(selector) { return selector === 'video' ? [visibleVideo] : []; },
+  /** 同时验证推荐页使用复数 reels 链接的情况。 */ querySelector(selector) {
+    if (selector === 'a[href*="/reels/"]') return { href: `https://www.instagram.com/reels/${visibleCode}/` };
+    if (selector === 'header a[href^="/"]') return { getAttribute: () => `/${visibleAuthor}/` };
+    return null;
+  },
+};
+const visibleVideo = {
+  parentElement: scope,
+  /** 推荐页没有 article 元素。 */ closest() { return null; },
+  /** 已滚动到视口中央。 */ getBoundingClientRect() { return { top: 0, bottom: 800, height: 800, width: 450 }; },
+};
+videos.push(visibleVideo);
+assert.equal(context.exports.readActiveReel().code, 'NEWCODE');
+assert.equal(context.exports.readActiveReel().reel.authors[0].username, 'new.creator');
+visibleCode = 'THIRDCODE';
+visibleAuthor = 'third.creator';
+assert.equal(context.exports.readActiveReel().code, 'THIRDCODE');
+assert.equal(context.exports.readActiveReel().reel.authors[0].username, 'third.creator');
+assert.equal(context.exports.readActiveReel().reel.mediaId, null, '不得套用旧视频元信息');
+
+assert.equal(context.exports.readFeedAuthor().username, 'third.creator');
+const originalQueryAll = document.querySelectorAll;
+/** 模拟作者栏与视频分离，且没有 Reel 永久链接和新 meta。 */
+scope.querySelector = () => null;
+let liveAuthor = 'visible.creator';
+const liveLink = {
+  /** 作者链接随页面内滚动更新。 */ get href() { return `https://www.instagram.com/${liveAuthor}/`; },
+  /** 作者名与链接一致。 */ get textContent() { return liveAuthor; },
+  /** 作者位于当前可见视频的底部。 */ getBoundingClientRect() { return { top: 700, bottom: 730, width: 100, height: 30 }; },
+};
+const staleLink = {
+  href: 'https://www.instagram.com/old.creator/', textContent: 'old.creator',
+  /** 预加载或上一条视频的作者已在视口外。 */ getBoundingClientRect() { return { top: -200, bottom: -170, width: 100, height: 30 }; },
+};
+/** 只给当前视频提供旁边可见的作者链接。 */
+document.querySelectorAll = selector => selector === 'main a[href]' ? [staleLink, liveLink] : originalQueryAll(selector);
+assert.equal(context.exports.readFeedAuthor().username, 'visible.creator');
+liveAuthor = 'next.visible';
+assert.equal(context.exports.readFeedAuthor().username, 'next.visible', '复用同一 DOM 节点也必须识别新作者');
+location.pathname = '/creator/reels/';
+assert.equal(context.exports.readFeedAuthor(), null, '主页网格不能走推荐页作者回退');

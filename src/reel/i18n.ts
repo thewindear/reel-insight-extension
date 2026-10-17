@@ -3,6 +3,15 @@ import type { Settings } from './settings';
 export type Language = Settings['language'];
 
 const english: Record<string, string> = {
+  '自动补全视频播放': 'Automatically fill video plays', '自动补全达人信息': 'Automatically fill creator information',
+  '播放数缺失时到达人 Reels 列表查找': 'Look up missing plays in the creator’s Reels list',
+  '开启达人资料采集，并打开达人详情页补全资料': 'Enable creator collection and open the creator profile to fill details',
+  '进入达人主页时保存资料与账户简介': 'Save profile and account information on creator pages',
+  '自动浏览推荐 Reels': 'Automatically browse recommended Reels',
+  '保存成功后等待间隔，再浏览下一条；需开启推荐页自动采集': 'Save, wait, then browse the next Reel. Requires feed collection.',
+  '推荐 Reels 浏览间隔': 'Recommended Reels browsing delay', '推荐 Reels 间隔单位': 'Feed browsing delay unit',
+  '每条 Reel 采集间隔': 'Delay before each Reel', '采集间隔单位': 'Collection delay unit',
+  '毫秒': 'Milliseconds', '秒': 'Seconds', '分钟': 'Minutes',
   '已保存': 'Saved', '条 Reel': 'Reels', '重新读取': 'Refresh', '打开 Instagram': 'Open Instagram',
   '请在 Instagram 的 Reel 视频页面打开此插件。': 'Open this extension on an Instagram Reel.',
   '等待 Reel 数据': 'Waiting for Reel data',
@@ -48,7 +57,6 @@ const english: Record<string, string> = {
   '自动采集 Reels 推荐页': 'Auto collect Reels feed',
   '上下切换视频时自动保存': 'Save each Reel as you browse up or down',
   '自动采集达人资料': 'Auto collect profile details',
-  '进入达人主页时保存资料与账户简介': 'Save profile details and account information when visiting a profile',
   '自动采集达人 Reels 列表': 'Auto collect profile Reels',
   '保存列表并逐条打开详情': 'Save loaded grid items and open each for details',
   '达人资料采集位置': 'Profile details collection location', 'Reels 列表采集位置': 'Reels list collection location',

@@ -15,7 +15,7 @@ let holdPause = false;
 let listener;
 
 const context = {
-  exports: {}, location, Event,
+  exports: {}, URLSearchParams, location, Event,
   history: { /** 模拟关闭 Instagram 详情弹层。 */ back() { location.pathname = profilePath; } },
   document: {
     readyState: 'complete',
@@ -56,7 +56,7 @@ const context = {
       mergeReels: (previous, next) => ({ ...previous, ...next, caption: next.caption ?? previous?.caption ?? null }),
     };
     if (name === '../reel/profile-url') return { profileUsername: () => null };
-    if (name === './page') return {
+    if (name === './page') return { readFeedAuthor: () => null,
       readProfilePage: () => null,
       readProfileReels: () => location.pathname === profilePath ? items : [],
       readActiveReel: () => location.pathname === profilePath ? null : {

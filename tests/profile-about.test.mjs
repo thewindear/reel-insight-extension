@@ -69,3 +69,54 @@ cancelled.abort();
 assert.equal(await context.exports.collectProfileAbout('creator', cancelled.signal), null, '关闭自动采集后不得打开账户简介');
 assert.equal(phase, 3, '关闭自动采集不得再次操作主页菜单');
 console.log('Automatic account-about collection checks passed');
+
+// 推荐页通过当前视频的菜单读取账户简介，不能借用预加载视频或主页头部。
+let authorUsername = 'creator';
+const feedProfile = profileFrom({ username: 'creator', full_name: 'Creator' });
+const feedLink = { href: 'https://www.instagram.com/reel/FEEDCODE/' };
+const authorLink = {
+  /** 推荐视频的发布者链接。 */ getAttribute() { return `/${authorUsername}/`; },
+};
+const feedOption = {
+  /** 推荐页使用 More options 标签而非主页 Options。 */ getAttribute() { return 'More options'; },
+  /** 模拟打开和收起视频菜单。 */ click() { phase = phase === 1 ? 0 : 1; },
+};
+const feedScope = {
+  tagName: 'DIV', parentElement: { tagName: 'MAIN' },
+  /** 当前容器只包含一条视频及其操作按钮。 */ querySelectorAll(selector) {
+    return selector === 'video' ? [feedVideo] : selector === 'button, [role="button"]' ? [feedOption] : [];
+  },
+  /** 公开发布者链接与 Reel 地址用于确认归属。 */ querySelector(selector) {
+    if (selector === 'a[href*="/reel/"]') return feedLink;
+    if (selector === 'header a[href^="/"]') return authorLink;
+    return null;
+  },
+};
+const feedVideo = {
+  parentElement: feedScope,
+  /** 视频位于视口中央。 */ getBoundingClientRect() { return { top: 0, bottom: 800, height: 800, width: 400 }; },
+  /** 模拟视频文章容器。 */ closest() { return feedScope; },
+};
+const originalQueryAll = document.querySelectorAll;
+/** 保留真实弹窗阶段，同时提供当前视频。 */
+document.querySelectorAll = selector => selector === 'video' ? [feedVideo] : originalQueryAll(selector);
+context.innerHeight = 900;
+location.href = 'https://www.instagram.com/reels/FEEDCODE/';
+location.pathname = '/reels/FEEDCODE/';
+phase = 0;
+const feedAbout = await context.exports.collectProfileAbout('creator', undefined, feedProfile);
+assert.equal(feedAbout.username, 'creator');
+assert.equal(feedAbout.joinedAt, '2024年12月');
+assert.equal(feedAbout.basedIn, '美国');
+assert.equal(phase, 3, '推荐页账户简介读完也必须关闭');
+authorUsername = 'other';
+phase = 0;
+assert.equal(await context.exports.collectProfileAbout('creator', undefined, feedProfile), null, '相邻视频作者不匹配时不能打开菜单');
+assert.equal(phase, 0);
+authorUsername = 'creator';
+const originalAboutClick = aboutButton.click;
+/** 打开账户简介期间用户手动切换推荐视频。 */
+aboutButton.click = () => { phase = 2; authorUsername = 'other'; };
+assert.equal(await context.exports.collectProfileAbout('creator', undefined, feedProfile), null, '打开弹窗后切换作者时不能保存旧资料');
+assert.equal(phase, 3, '切换作者后仍要关闭扩展打开的旧弹窗');
+aboutButton.click = originalAboutClick;

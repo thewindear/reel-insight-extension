@@ -383,7 +383,10 @@ export function Popup(): React.ReactNode {
 
   /** 保存配置并立即更新界面，其他标签页会通过存储变更同步。 */
   async function changeSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> {
-    const next = { ...settings, [key]: value };
+    const next = settingsFrom({ ...settings, [key]: value,
+      ...(key === 'autoFeedProfiles' && value === true ? { autoProfileData: true } : {}),
+      ...(key === 'autoProfileData' && value === false ? { autoFeedProfiles: false } : {}),
+    });
     setSettings(next);
     setError('');
     try { await browser.storage.local.set({ settings: next }); }
@@ -538,6 +541,23 @@ export function Popup(): React.ReactNode {
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3"><div><p className="text-[12px] font-medium">{t('自动采集 Reels 推荐页')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{t('上下切换视频时自动保存')}</p></div>
           <Button size="xs" variant={settings.autoFeed ? 'default' : 'outline'} aria-label={`${t('自动采集 Reels 推荐页')}: ${t(settings.autoFeed ? '开启' : '关闭')}`} aria-pressed={settings.autoFeed} onClick={() => void changeSetting('autoFeed', !settings.autoFeed)}>{t(settings.autoFeed ? '开启' : '关闭')}</Button>
         </div>
+        <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-medium">{t('自动补全视频播放')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{t('播放数缺失时到达人 Reels 列表查找')}</p></div>
+          <Button size="xs" variant={settings.autoFeedPlays ? 'default' : 'outline'} aria-label={`${t('自动补全视频播放')}: ${t(settings.autoFeedPlays ? '开启' : '关闭')}`} aria-pressed={settings.autoFeedPlays} onClick={() => void changeSetting('autoFeedPlays', !settings.autoFeedPlays)}>{t(settings.autoFeedPlays ? '开启' : '关闭')}</Button>
+        </div>
+        <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-medium">{t('自动补全达人信息')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{t('开启达人资料采集，并打开达人详情页补全资料')}</p></div>
+          <Button size="xs" variant={settings.autoFeedProfiles ? 'default' : 'outline'} aria-label={`${t('自动补全达人信息')}: ${t(settings.autoFeedProfiles ? '开启' : '关闭')}`} aria-pressed={settings.autoFeedProfiles} onClick={() => void changeSetting('autoFeedProfiles', !settings.autoFeedProfiles)}>{t(settings.autoFeedProfiles ? '开启' : '关闭')}</Button>
+        </div>
+        <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-medium">{t('自动浏览推荐 Reels')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{t('保存成功后等待间隔，再浏览下一条；需开启推荐页自动采集')}</p></div>
+          <Button size="xs" variant={settings.autoBrowseFeed ? 'default' : 'outline'} aria-label={`${t('自动浏览推荐 Reels')}: ${t(settings.autoBrowseFeed ? '开启' : '关闭')}`} aria-pressed={settings.autoBrowseFeed} onClick={() => void changeSetting('autoBrowseFeed', !settings.autoBrowseFeed)}>{t(settings.autoBrowseFeed ? '开启' : '关闭')}</Button>
+        </div>
+        <div className="flex items-center justify-between gap-3"><label htmlFor="feed-delay" className="text-[12px]">{t('推荐 Reels 浏览间隔')}</label>
+          <div className="flex gap-2">
+            <input id="feed-delay" type="number" min="0.001" step="any" value={settings.feedDelay} onChange={event => void changeSetting('feedDelay', Number(event.target.value))} className="h-8 w-24 rounded-md border border-border bg-background px-2 text-center text-[11px] text-foreground" />
+            <select aria-label={t('推荐 Reels 间隔单位')} value={settings.feedDelayUnit} onChange={event => void changeSetting('feedDelayUnit', event.target.value as Settings['feedDelayUnit'])} className="h-8 rounded-md border border-border bg-background px-2 text-[11px] text-foreground">
+              <option value="ms">{t('毫秒')}</option><option value="s">{t('秒')}</option><option value="min">{t('分钟')}</option>
+            </select>
+          </div>
+        </div>
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3"><div><p className="text-[12px] font-medium">{t('自动采集达人资料')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{t('进入达人主页时保存资料与账户简介')}</p></div>
           <Button size="xs" variant={settings.autoProfileData ? 'default' : 'outline'} aria-label={`${t('自动采集达人资料')}: ${t(settings.autoProfileData ? '开启' : '关闭')}`} aria-pressed={settings.autoProfileData} onClick={() => void changeSetting('autoProfileData', !settings.autoProfileData)}>{t(settings.autoProfileData ? '开启' : '关闭')}</Button>
         </div>
@@ -553,6 +573,14 @@ export function Popup(): React.ReactNode {
           <select id="profile-mode" value={settings.profileMode} onChange={event => void changeSetting('profileMode', event.target.value === 'current-tab' ? 'current-tab' : 'new-tab')} className="h-8 rounded-md border border-border bg-background px-2 text-[11px] text-foreground">
             <option value="new-tab">{t('独立采集窗口')}</option><option value="current-tab">{t('当前页')}</option>
           </select>
+        </div>
+        <div className="flex items-center justify-between gap-3"><label htmlFor="profile-delay" className="text-[12px]">{t('每条 Reel 采集间隔')}</label>
+          <div className="flex gap-2">
+            <input id="profile-delay" type="number" min="0.001" step="any" value={settings.profileDelay} onChange={event => void changeSetting('profileDelay', Number(event.target.value))} className="h-8 w-24 rounded-md border border-border bg-background px-2 text-center text-[11px] text-foreground" />
+            <select aria-label={t('采集间隔单位')} value={settings.profileDelayUnit} onChange={event => void changeSetting('profileDelayUnit', event.target.value as Settings['profileDelayUnit'])} className="h-8 rounded-md border border-border bg-background px-2 text-[11px] text-foreground">
+              <option value="ms">{t('毫秒')}</option><option value="s">{t('秒')}</option><option value="min">{t('分钟')}</option>
+            </select>
+          </div>
         </div>
         <div className="flex items-center justify-between gap-3"><label htmlFor="profile-pages" className="text-[12px]">{t('采集前几页')}</label>
           <input id="profile-pages" type="number" min="1" max="100" step="1" value={settings.profilePages} onChange={event => void changeSetting('profilePages', Math.max(1, Math.min(100, Number(event.target.value) || 1)))} className="h-8 w-16 rounded-md border border-border bg-background px-2 text-center text-[11px] text-foreground" />

@@ -1,6 +1,6 @@
 import { authorFrom, profileFrom } from '../reel/extract';
 import { profileUsername } from '../reel/profile-url';
-import type { Profile, Reel } from '../reel/types';
+import type { Author, Profile, Reel } from '../reel/types';
 
 /** 从 Reel 详情或信息流地址中读取 shortcode。 */
 function reelCode(url: string): string | null {
@@ -56,23 +56,72 @@ function aboutValues(username: string): Pick<Profile, 'joinedAt' | 'basedIn' | '
   };
 }
 
+/** 直接识别推荐页可见发布者，不依赖刷新后才完整的视频元信息或 shortcode。 */
+export function readFeedAuthor(): Author | null {
+  if (!/^\/reels(?:\/|$)/.test(location.pathname)) return null;
+  const video = activeVideo();
+  if (!video) return null;
+  const rect = video.getBoundingClientRect();
+  if (rect.bottom <= 0 || rect.top >= innerHeight) return null;
+  let scope: Element = video;
+  while (scope.parentElement && scope.parentElement.tagName !== 'MAIN' &&
+    scope.parentElement.querySelectorAll('video').length === 1) scope = scope.parentElement;
+  const scoped = scope.querySelector<HTMLAnchorElement>('header a[href^="/"]') ??
+    scope.querySelector<HTMLAnchorElement>('a[href^="/"]');
+  const links = [...(scoped ? [scoped] : []), ...document.querySelectorAll<HTMLAnchorElement>('main a[href]')];
+  for (const link of links) {
+    const username = profileUsername(link.href || new URL(link.getAttribute('href') || '', location.href).href);
+    if (!username) continue;
+    // 作者栏可能与 video 分属不同容器，此时只接受当前视频高度范围内的同名主页链接。
+    if (link !== scoped) {
+      const bounds = link.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0 || bounds.top < Math.max(0, rect.top) ||
+        bounds.bottom > Math.min(innerHeight, rect.bottom) || link.textContent?.trim().toLowerCase() !== username.toLowerCase()) continue;
+    }
+    return authorFrom({ username });
+  }
+  return null;
+}
+
 /** 自动打开当前达人的账户简介并读取字段，随后关闭扩展打开的弹窗。 */
-export async function collectProfileAbout(username: string, signal?: AbortSignal): Promise<Profile | null> {
-  if (signal?.aborted || profileUsername(location.href)?.toLowerCase() !== username.toLowerCase()) return null;
-  const base = readProfilePage();
+export async function collectProfileAbout(username: string, signal?: AbortSignal, feedProfile?: Profile): Promise<Profile | null> {
+  const feedCode = feedProfile ? readActiveReel()?.code ?? null : null;
+  /** 每次等待后重新确认账号和视频，不能把相邻推荐视频的账户简介混入。 */
+  function isCurrent(): boolean {
+    if (!feedProfile) return profileUsername(location.href)?.toLowerCase() === username.toLowerCase();
+    const current = readActiveReel();
+    return /^\/reels(?:\/|$)/.test(location.pathname) && (current?.code ?? null) === feedCode &&
+      readFeedAuthor()?.username.toLowerCase() === username.toLowerCase();
+  }
+  if (signal?.aborted || !isCurrent()) return null;
+  const base = feedProfile ?? readProfilePage();
   if (!base) return null;
   if (aboutDialog(username)) return { ...base, ...aboutValues(username) };
   if (document.querySelector('[role="dialog"]')) return null;
-  const header = document.querySelector('main header');
+  let header: Element | null = feedProfile ? activeVideo() : document.querySelector('main header');
+  // 推荐页右下角菜单与视频同属一个容器，不能点击预加载视频的菜单。
+  if (feedProfile) {
+    while (header?.parentElement && header.parentElement.tagName !== 'MAIN' &&
+      header.parentElement.querySelectorAll('video').length === 1) header = header.parentElement;
+  }
   if (!header) return null;
-  const option = [...header.querySelectorAll<HTMLElement>('button, [role="button"]')].find(button =>
-    /^(?:选项|Options)$/i.test(button.getAttribute('aria-label') || button.querySelector('svg[aria-label]')?.getAttribute('aria-label') || ''));
+  const buttons = [...header.querySelectorAll<HTMLElement>('button, [role="button"]')];
+  if (feedProfile) {
+    const rect = activeVideo()?.getBoundingClientRect();
+    for (const button of document.querySelectorAll<HTMLElement>('main button, main [role="button"]')) {
+      const bounds = button.getBoundingClientRect();
+      if (rect && bounds.width > 0 && bounds.height > 0 && bounds.top >= Math.max(0, rect.top) &&
+        bounds.bottom <= Math.min(innerHeight, rect.bottom)) buttons.push(button);
+    }
+  }
+  const option = buttons.find(button =>
+    /^(?:选项|更多|更多选项|Options|More|More options)$/i.test(button.getAttribute('aria-label') || button.querySelector('svg[aria-label]')?.getAttribute('aria-label') || ''));
   if (!option) return null;
   option.click();
   let aboutButton: HTMLElement | null = null;
   for (let attempt = 0; attempt < 20; attempt++) {
     // 开关关闭或页面切换时收起扩展打开的菜单。
-    if (signal?.aborted || profileUsername(location.href)?.toLowerCase() !== username.toLowerCase()) { option.click(); return null; }
+    if (signal?.aborted || !isCurrent()) { option.click(); return null; }
     aboutButton = [...document.querySelectorAll<HTMLElement>('button, [role="button"]')].find(button =>
       /^(?:账户简介|About this account)$/i.test(button.textContent?.trim() ?? '') &&
       button.getBoundingClientRect().width > 0) ?? null;
@@ -84,13 +133,13 @@ export async function collectProfileAbout(username: string, signal?: AbortSignal
   aboutButton.click();
   let dialog: HTMLElement | null = null;
   for (let attempt = 0; attempt < 40; attempt++) {
-    if (profileUsername(location.href)?.toLowerCase() !== username.toLowerCase()) break;
     dialog = aboutDialog(username);
+    if (!isCurrent()) break;
     if (dialog) break;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   // 弹窗已打开时即使采集被关闭，也要等其出现并收起，但不读取字段。
-  const profile = !signal?.aborted && dialog && profileUsername(location.href)?.toLowerCase() === username.toLowerCase() ? { ...base, ...aboutValues(username) } : null;
+  const profile = !signal?.aborted && dialog && isCurrent() ? { ...base, ...aboutValues(username) } : null;
   const close = [...(dialog?.querySelectorAll<HTMLElement>('button, [role="button"]') ?? [])].find(button =>
     /^(?:关闭|Close)$/i.test(button.textContent?.trim() || button.getAttribute('aria-label') || ''));
   close?.click();
@@ -108,7 +157,7 @@ export function readProfilePage(): Profile | null {
   const following = header.querySelector<HTMLAnchorElement>('a[href$="/following/"]');
   const name = header.querySelector('h1')?.textContent?.trim();
   const about = aboutValues(username);
-  return profileFrom({
+  const profile = profileFrom({
     username,
     full_name: name?.toLowerCase() === username.toLowerCase() ? null : name,
     profile_pic_url: header.querySelector<HTMLImageElement>('img')?.src,
@@ -116,13 +165,15 @@ export function readProfilePage(): Profile | null {
     follower_count: exactCount(followers?.querySelector('[title]')?.getAttribute('title') ?? followers?.textContent?.trim()),
     following_count: exactCount(following?.querySelector('[title]')?.getAttribute('title') ?? following?.textContent?.trim()),
     is_verified: header.querySelector('svg[aria-label="Verified"], svg[aria-label="已认证"]') ? true : null,
-    external_url: links[0], bio_links: links.map(url => ({ url })),
+    external_url: links[0], ...(links.length ? { bio_links: links.map(url => ({ url })) } : {}),
     about_this_account: {
       date_joined: about.joinedAt,
       account_based_in: about.basedIn,
       date_verified: about.verifiedAt,
     },
   });
+  // 主页可能折叠多个 Bio 链接，DOM 结果不能覆盖接口提供的完整列表。
+  return profile ? { ...profile, bioLinksComplete: false } : null;
 }
 
 /** 只在当前视频的可见区域读取带名称的互动按钮计数。 */
@@ -162,7 +213,8 @@ function videoReelLink(video: HTMLVideoElement | null): HTMLAnchorElement | null
   let parent = video?.parentElement;
   // 只沿着包含当前一条视频的祖先查找，进入多视频容器后链接可能属于相邻 Reel。
   while (parent && parent.tagName !== 'MAIN' && parent.querySelectorAll('video').length === 1) {
-    const link = parent.querySelector<HTMLAnchorElement>('a[href*="/reel/"]');
+    const link = parent.querySelector<HTMLAnchorElement>('a[href*="/reel/"]') ??
+      parent.querySelector<HTMLAnchorElement>('a[href*="/reels/"]');
     if (link) return link;
     parent = parent.parentElement;
   }
@@ -198,7 +250,13 @@ function visibleTaggedUsers(video: HTMLVideoElement | null): Reel['taggedUsers']
 
 /** 页面响应缺失时，从当前 Reel 的 DOM 与元信息补齐可见字段。 */
 function pageReel(code: string, video: HTMLVideoElement | null): Reel | null {
-  const root = video?.closest('article') ?? videoReelLink(video)?.closest('article') ?? document.querySelector('main article');
+  let root: Element | null = video?.closest('article') ?? null;
+  // 推荐页通常没有 article，作者必须从当前视频自己的容器读取。
+  if (!root && video) {
+    for (let parent = video.parentElement; parent && parent.tagName !== 'MAIN' &&
+      parent.querySelectorAll('video').length === 1; parent = parent.parentElement) root = parent;
+  }
+  if (!video) root = document.querySelector('main article');
   const profile = root?.querySelector<HTMLAnchorElement>('header a[href^="/"]') ??
     root?.querySelector<HTMLAnchorElement>('a[href^="/"]');
   const direct = reelCode(location.href) === code;
@@ -249,8 +307,35 @@ export function readActiveReel(): { code: string; reel: Reel | null } | null {
   // 用户主页的网格可能包含预览视频，不能把其中一条当作当前详情视频。
   if (/^\/[A-Za-z0-9._]+\/reels\/?$/.test(location.pathname)) return null;
   const video = activeVideo();
-  const code = reelCode(location.href) ?? reelCode(videoReelLink(video)?.href ?? '');
+  const visibleCode = reelCode(videoReelLink(video)?.href ?? '');
+  // 滚动推荐视频后地址栏和 meta 可能仍是上一条，优先使用可见视频的链接。
+  const code = /^\/reels(?:\/|$)/.test(location.pathname) ? visibleCode ?? reelCode(location.href) :
+    reelCode(location.href) ?? visibleCode;
   return code ? { code, reel: pageReel(code, video) } : null;
+}
+
+/** 仅在推荐信息流中滚动到当前视频之后的一条，不操作达人列表或详情页。 */
+export function advanceFeedReel(): boolean {
+  if (!/^\/reels(?:\/|$)/.test(location.pathname)) return false;
+  const current = activeVideo();
+  if (!current) return false;
+  const rect = current.getBoundingClientRect();
+  if (rect.bottom <= 0 || rect.top >= innerHeight) return false;
+  const next = [...document.querySelectorAll('video')]
+    .filter(video => video !== current && video.getBoundingClientRect().width > 0 && video.getBoundingClientRect().top >= rect.bottom)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
+  if (next) {
+    next.scrollIntoView({ block: 'center', behavior: 'instant' });
+    return true;
+  }
+  // 尚未加载下一条时只滚动当前视频所在的容器，避免误动评论或抽屉。
+  for (let parent = current.parentElement; parent; parent = parent.parentElement) {
+    if (parent.scrollHeight > parent.clientHeight && parent.clientHeight >= rect.height) {
+      parent.scrollBy({ top: parent.clientHeight, behavior: 'instant' });
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 读取用户 Reels 网格中已经加载的链接与封面，未展示的字段留空。 */
