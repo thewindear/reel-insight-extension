@@ -341,6 +341,14 @@ After installing or updating the extension, refresh any open Instagram pages bef
 
 If the extension's content script is not yet available on the current page, clicking its icon opens a standalone records page instead.
 
+## GitHub Release packages
+
+Publishing a GitHub Release runs `.github/workflows/release.yml` for its tag. The workflow installs locked dependencies with Node.js 24, runs type checks and tests, builds the Chrome Manifest V3 extension, and uploads `reel-insight-chrome.zip` to that release. Published pre-releases are supported; drafts do not start a build.
+
+Include the workflow in the commit referenced by the release tag. Before tagging, update the extension version in `package.json` and `package-lock.json`; the workflow preserves that version. The built package is attached to the same GitHub Release using the built-in `GITHUB_TOKEN`, so no additional secrets are needed. Existing assets are not overwritten; remove a previous ZIP before rerunning a successful release job.
+
+Download the ZIP from the release's Assets section, extract it, and select the extracted folder using **Load unpacked** at `chrome://extensions` with Developer mode enabled. The ZIP contains `manifest.json` at its root. This workflow distributes the extension through GitHub Releases; it does not submit it to the Chrome Web Store.
+
 ## 📁 Project Structure
 
 ```text
