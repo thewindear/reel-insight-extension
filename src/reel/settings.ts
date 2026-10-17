@@ -16,7 +16,12 @@ export type Settings = {
   profileDelayUnit: 'ms' | 's' | 'min';
 };
 
-export const defaultSettings: Settings = { language: 'zh', autoFeed: true, autoFeedPlays: true, autoFeedProfiles: true, autoBrowseFeed: false, feedDelay: 1000, feedDelayUnit: 'ms', autoProfileData: true, autoProfile: false, profileDataMode: 'new-tab', profileMode: 'new-tab', profilePages: 1, profileDelay: 1000, profileDelayUnit: 'ms' };
+/** 按浏览器首选语言选择默认界面语言，所有中文变体用中文，其余用英文。 */
+export function browserLanguage(locale = globalThis.navigator?.language ?? 'en'): Settings['language'] {
+  return /^zh(?:[-_]|$)/i.test(locale) ? 'zh' : 'en';
+}
+
+export const defaultSettings: Settings = { language: browserLanguage(), autoFeed: true, autoFeedPlays: true, autoFeedProfiles: true, autoBrowseFeed: false, feedDelay: 1000, feedDelayUnit: 'ms', autoProfileData: true, autoProfile: false, profileDataMode: 'new-tab', profileMode: 'new-tab', profilePages: 1, profileDelay: 1000, profileDelayUnit: 'ms' };
 
 /** 从本地存储读取有限的配置值，忽略无效字段。 */
 export function settingsFrom(value: unknown): Settings {
@@ -35,7 +40,7 @@ export function settingsFrom(value: unknown): Settings {
     profileDelayUnit,
     profileDelay: typeof raw.profileDelay === 'number' && Number.isFinite(raw.profileDelay) &&
       raw.profileDelay * multiplier >= 1 && raw.profileDelay * multiplier <= 2147483647 ? raw.profileDelay : 1000 / multiplier,
-    language: raw.language === 'en' ? 'en' : 'zh',
+    language: raw.language === 'zh' || raw.language === 'en' ? raw.language : defaultSettings.language,
     autoFeed: typeof raw.autoFeed === 'boolean' ? raw.autoFeed : defaultSettings.autoFeed,
     autoProfileData: raw.autoFeedProfiles === true || (typeof raw.autoProfileData === 'boolean' ? raw.autoProfileData : defaultSettings.autoProfileData),
     autoProfile: typeof raw.autoProfile === 'boolean' ? raw.autoProfile : defaultSettings.autoProfile,

@@ -1,7 +1,7 @@
 {
   "name": "reel-insight-extension",
   "version": "0.1.0",
-  "description": "采集 Instagram Reels 视频与达人资料，查看互动数据和账户简介，管理记录并导出 Excel。",
+  "description": "Collect Instagram Reels and creator profiles, view engagement and account details, manage records, and export to Excel.",
   "author": { "email": "thewindear@outlook.com" },
   "private": true,
   "type": "module",

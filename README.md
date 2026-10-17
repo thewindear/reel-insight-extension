@@ -169,6 +169,8 @@ You can also clear records manually without exporting.
 
 ### 🌍 Multilingual Interface
 
+On first use, the interface follows the browser’s primary preferred language: Chinese (`zh`, including Simplified and Traditional variants) selects Chinese; every other language selects English. A saved language choice takes priority over the browser default.
+
 Reel Insight supports:
 
 - 🇺🇸 English

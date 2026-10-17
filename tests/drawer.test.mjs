@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { defaultSettings } from '../src/reel/settings.ts';
+import { translate } from '../src/reel/i18n.ts';
 import { startDrawer } from '../src/content/drawer.ts';
 
 /** 建立测试抽屉所需的最小 DOM 节点。 */
@@ -69,10 +71,10 @@ try {
   assert.equal(body.children.length, 2, '忽略其他扩展伪造的完成提示');
   listener({ type: 'PROFILE_COLLECTION_COMPLETE', profile: 'creator' }, { id: 'extension-id' }, () => {});
   assert.equal(body.children.length, 3);
-  assert.equal(body.children[2].shadow.children[1].textContent, '@creator 的 Reels 列表已采集结束');
+  assert.equal(body.children[2].shadow.children[1].textContent, `@creator ${translate(defaultSettings.language, '的 Reels 列表已采集结束')}`);
   assert.equal(body.children[2].shadow.children[1].role, 'status');
   listener({ type: 'PROFILE_COLLECTION_COMPLETE', profile: 'creator', kind: 'profile' }, { id: 'extension-id' }, () => {});
-  assert.equal(body.children.at(-1).shadow.children[1].textContent, '@creator 的达人资料已采集结束');
+  assert.equal(body.children.at(-1).shadow.children[1].textContent, `@creator ${translate(defaultSettings.language, '的达人资料已采集结束')}`);
   console.log('Persistent drawer open and close checks passed');
 } finally {
   globalThis.document = originalDocument;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { defaultSettings, settingsFrom } from '../src/reel/settings.ts';
+import { browserLanguage, defaultSettings, settingsFrom } from '../src/reel/settings.ts';
 import { translate } from '../src/reel/i18n.ts';
 
 assert.deepEqual(settingsFrom(null), defaultSettings);
@@ -51,3 +51,15 @@ for (const key of ['autoFeedPlays', 'autoFeedProfiles']) {
 assert.equal(settingsFrom({ autoProfileData: false, autoFeedProfiles: true }).autoFeedProfiles, true);
 
 assert.equal(settingsFrom({ autoFeedProfiles: true, autoProfileData: false }).autoProfileData, true);
+
+for (const locale of ['zh', 'zh-CN', 'zh-TW', 'zh-HK', 'zh-Hans', 'zh-Hant', 'ZH-cn']) {
+  assert.equal(browserLanguage(locale), 'zh');
+}
+for (const locale of ['en', 'en-US', 'ja-JP', 'fr-FR', 'de-DE', 'ko-KR', '']) {
+  assert.equal(browserLanguage(locale), 'en');
+}
+assert.equal(defaultSettings.language, browserLanguage());
+assert.equal(settingsFrom({}).language, browserLanguage());
+assert.equal(settingsFrom({ language: 'invalid' }).language, browserLanguage());
+assert.equal(settingsFrom({ language: 'zh' }).language, 'zh', '手动中文设置优先于浏览器语言');
+assert.equal(settingsFrom({ language: 'en' }).language, 'en', '手动英文设置优先于浏览器语言');
