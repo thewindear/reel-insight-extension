@@ -335,7 +335,7 @@ function ProfilesTable({ records }: { records: SavedProfile[] }): React.ReactNod
   return <div className="overflow-x-auto rounded-xl border border-border bg-card">
     <table className="w-full min-w-[1700px] table-fixed border-collapse text-left text-[11px]">
       <thead className="bg-secondary text-muted-foreground"><tr>
-        {['头像', '昵称', 'ins id', 'username', '帖子数', '粉丝数', '关注数', 'bio', 'bio 里的链接', '是否认证', '加入时间', '账户所在地', '认证时间'].map((label, index) =>
+        {['头像', '昵称', 'ins id', 'username', '帖子数', '粉丝数', '关注数', 'bio', 'bio 里的链接', '是否认证', '加入时间', '账户所在地', '认证时间', '分类'].map((label, index) =>
           <th key={label} scope="col" className="border-b border-border px-3 py-2.5 font-medium" style={{ width: index === 7 || index === 8 ? 230 : index === 0 ? 68 : 120 }}>{t(label)}</th>)}
       </tr></thead>
       <tbody>{records.map(profile => <tr key={profile.username} className="border-b border-border/70 align-top last:border-0">
@@ -350,6 +350,7 @@ function ProfilesTable({ records }: { records: SavedProfile[] }): React.ReactNod
         <td className="px-3 py-3">{profile.joinedAt ?? '—'}</td>
         <td className="break-words px-3 py-3">{profile.basedIn ?? '—'}</td>
         <td className="px-3 py-3">{profile.verifiedAt ?? '—'}</td>
+        <td className="break-words px-3 py-3">{profile.category || '-'}</td>
       </tr>)}</tbody>
     </table>
   </div>;

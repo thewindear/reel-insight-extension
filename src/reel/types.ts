@@ -16,6 +16,8 @@ export type Author = {
 
 /** 单独保存的达人资料；账户简介未提供的字段以 null 表示。 */
 export type Profile = Author & {
+  /** 达人分类；未提供时为空字符串。 */
+  category: string;
   bioLinks: string[];
   /** 页面明确提供完整链接列表时为 true；旧记录可能没有此字段。 */
   bioLinksComplete?: boolean;

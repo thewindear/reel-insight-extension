@@ -39,6 +39,7 @@ Supported fields include:
 | Posts | Total number of posts |
 | Followers | Follower count |
 | Following | Following count |
+| Category | Creator category, when provided; saved as `""` when unavailable and displayed as `-` |
 | Biography | Profile biography |
 | Bio Links | External links listed in the profile |
 | Verified | Account verification status |

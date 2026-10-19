@@ -84,3 +84,7 @@ const englishBlob = await writeExcelFile([Array.from(exportHeadersEn), Array.fro
 const englishFiles = unzipSync(new Uint8Array(await englishBlob.arrayBuffer()));
 assert.match(new TextDecoder().decode(englishFiles['xl/sharedStrings.xml']), /Publisher username/);
 console.log('Saved Reel upsert and Excel field mapping checks passed');
+
+assert.equal(exportProfileRow({ ...profiles[0], category: 'Artist' })[15], 'Artist');
+assert.equal(exportProfileRow(profiles[0])[15], '');
+assert.equal(upsertProfile([], { ...profile, category: 'Artist' }, '2026-10-16T00:00:00.000Z')[0].category, 'Artist');

@@ -45,7 +45,7 @@ export function exportProfileRow(profile: SavedProfile, language: Language = 'zh
     profile.avatar, profile.name, profile.id, profile.username, profile.posts, profile.followers,
     profile.following, profile.biography, JSON.stringify(profile.bioLinks.map(bioUrl).filter((url): url is string => url !== null)),
     profile.verified === null ? null : profile.verified ? language === 'en' ? 'Yes' : '是' : language === 'en' ? 'No' : '否',
-    profile.joinedAt, profile.basedIn, profile.verifiedAt, profile.profileUrl, new Date(profile.savedAt),
+    profile.joinedAt, profile.basedIn, profile.verifiedAt, profile.profileUrl, new Date(profile.savedAt), profile.category ?? '',
   ];
 }
 
@@ -72,8 +72,8 @@ export async function downloadExcel(records: SavedReel[], language: Language = '
 /** 将达人资料按独立列导出，缺失字段保持为空单元格。 */
 export async function downloadProfilesExcel(records: SavedProfile[], language: Language = 'zh'): Promise<void> {
   const { default: writeExcelFile } = await import('write-excel-file/universal');
-  const headers = language === 'en' ? ['Avatar', 'Name', 'Instagram ID', 'Username', 'Posts', 'Followers', 'Following', 'Bio', 'Bio links', 'Verified', 'Date joined', 'Account based in', 'Date verified', 'Profile URL', 'Last collected at (UTC)'] :
-    ['头像', '昵称', 'ins id', 'username', '帖子数', '粉丝数', '关注数', 'bio', 'bio 里的链接', '是否认证', '加入时间', '账户所在地', '认证时间', '达人主页', '最近采集时间 (UTC)'];
+  const headers = language === 'en' ? ['Avatar', 'Name', 'Instagram ID', 'Username', 'Posts', 'Followers', 'Following', 'Bio', 'Bio links', 'Verified', 'Date joined', 'Account based in', 'Date verified', 'Profile URL', 'Last collected at (UTC)', 'Category'] :
+    ['头像', '昵称', 'ins id', 'username', '帖子数', '粉丝数', '关注数', 'bio', 'bio 里的链接', '是否认证', '加入时间', '账户所在地', '认证时间', '达人主页', '最近采集时间 (UTC)', '分类'];
   const rows = [headers.map(header => ({ value: header, fontWeight: 'bold' as const })),
     ...records.map(profile => exportProfileRow(profile, language))];
   const blob = await writeExcelFile(rows, {

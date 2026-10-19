@@ -67,7 +67,7 @@ assert.deepEqual(flatTagged.taggedUsers.map(user => user.username), ['flat.tag']
 assert.equal(reelFromPageEvent({ ...reel, code: '<script>' }), null);
 assert.equal(Object.hasOwn(reelFromPageEvent({ ...reel, shares: 7 }), 'shares'), false);
 const profile = findProfile({ data: { user: { pk: '12', username: 'creator', full_name: 'Creator',
-  profile_pic_url: 'https://example.com/avatar.jpg', biography: 'Hello',
+  profile_pic_url: 'https://example.com/avatar.jpg', biography: 'Hello', category_name: 'Digital creator',
   bio_links: [{ url: 'https://example.com/home' }, { url: 'javascript:alert(1)' }],
   follower_count: 0, following_count: 8, media_count: 3, is_verified: false,
   about_this_account: { date_joined: 'October 2020', account_based_in: 'United States', date_verified: 'June 2022' },
@@ -120,3 +120,13 @@ const redirectProfile = profileFrom({ username: 'creator',
 assert.equal(redirectProfile.externalUrl, 'https://linktr.ee/creator', '达人头像链接应还原跳转地址');
 assert.deepEqual(redirectProfile.bioLinks, ['https://linktr.ee/creator', 'https://example.com/bio', 'https://example.com/home']);
 console.log('Reel extraction checks passed');
+
+assert.equal(profile.category, 'Digital creator');
+assert.equal(profileFrom({ username: 'creator' }).category, '');
+assert.equal(profileFrom({ username: 'creator', category_name: 123 }).category, '');
+assert.equal(profileFrom({ username: 'creator', category: 'Artist' }).category, 'Artist');
+assert.equal(profileFrom({ username: 'creator', business_category_name: 'Business' }).category, 'Business');
+assert.equal(profileFromPageEvent(profile).category, 'Digital creator');
+assert.equal(profileFromPageEvent({ ...profile, category: {} }).category, '');
+assert.equal(mergeProfiles(profile, profileFrom({ username: 'creator' })).category, 'Digital creator');
+assert.equal(mergeProfiles(profile, profileFrom({ username: 'creator', category_name: 'Artist' })).category, 'Artist');

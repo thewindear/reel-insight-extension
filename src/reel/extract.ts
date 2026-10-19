@@ -150,6 +150,7 @@ export function profileFrom(value: unknown): Profile | null {
     .filter((url): url is string => url !== null);
   return {
     ...author,
+    category: first(user.category_name, user.category, user.business_category_name) ?? '',
     bioLinks: [...new Set(bioLinks)],
     bioLinksComplete: Array.isArray(user.bio_links),
     joinedAt: first(about?.date_joined, user.date_joined),
@@ -160,10 +161,12 @@ export function profileFrom(value: unknown): Profile | null {
 
 /** 合并分批取得的达人字段，完整链接列表替换旧值，缺失链接字段时保留已知结果。 */
 export function mergeProfiles(existing: Profile | undefined, incoming: Profile): Profile {
-  if (!existing) return incoming;
+  if (!existing) return { ...incoming, category: incoming.category ?? '' };
   return {
     ...existing,
     ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== null)),
+    // 局部响应或 DOM 兜底可能缺少分类，不能清空已采集的分类。
+    category: incoming.category || existing.category || '',
     bioLinks: incoming.bioLinksComplete === true || (existing.bioLinksComplete !== true && incoming.bioLinks.length > 0) ?
       incoming.bioLinks : existing.bioLinks,
     bioLinksComplete: incoming.bioLinksComplete === true || existing.bioLinksComplete === true,
@@ -195,6 +198,7 @@ export function profileFromPageEvent(value: unknown): Profile | null {
   return profileFrom({
     username: item.username, pk: item.id, full_name: item.name,
     profile_pic_url: item.avatar, is_verified: item.verified,
+    category_name: item.category,
     biography: item.biography, follower_count: item.followers,
     following_count: item.following, media_count: item.posts,
     is_private: item.private, external_url: item.externalUrl,

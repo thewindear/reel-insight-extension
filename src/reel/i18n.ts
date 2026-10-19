@@ -76,7 +76,7 @@ const english: Record<string, string> = {
   'Reel 采集记录': 'Reel records',
   '关闭采集抽屉': 'Close records panel',
   '视频': 'Reels', '达人': 'Profiles', '位达人': 'profiles',
-  '昵称': 'Name', 'ins id': 'Instagram ID', 'username': 'Username', '帖子数': 'Posts',
+  '分类': 'Category', '昵称': 'Name', 'ins id': 'Instagram ID', 'username': 'Username', '帖子数': 'Posts',
   '粉丝数': 'Followers', '关注数': 'Following', 'bio': 'Bio', 'bio 里的链接': 'Bio links',
   '是否认证': 'Verified', '加入时间': 'Date joined', '账户所在地': 'Account based in',
   '认证时间': 'Date verified', '是': 'Yes', '否': 'No', '复制链接': 'Copy link', '已复制链接': 'Link copied',
