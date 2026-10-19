@@ -12,6 +12,7 @@ let listener;
 let settingsListener;
 let poll;
 let profileAboutCalls = 0;
+let avatarCalls = 0;
 const saved = [];
 const scripts = [];
 const profile = { username: 'creator', joinedAt: null, basedIn: null, verifiedAt: null };
@@ -60,6 +61,8 @@ const context = {
       profileUsername: url => url === 'https://www.instagram.com/creator/' ? 'creator' : null };
     if (name === './page') return { readFeedAuthor: () => null, readActiveReel: () => current,
       /** 只在当前达人主页提供资料。 */
+      /** 模拟通过页面读取临时头像。 */
+      readAvatar: async () => { avatarCalls++; return 'data:image/jpeg;base64,AQID'; },
       readProfilePage: () => context.location.pathname === '/creator/' ? profile : null,
       readProfileReels: () => profileReels,
       /** 记录自动打开账户简介的次数。 */
@@ -150,3 +153,13 @@ assert.equal(saved.filter(message => message.type === 'SAVE_PROFILE').length > b
 assert.equal(profileAboutCalls, 2, '手动采集仍会读取账户简介');
 assert.equal(request('COLLECT_PROFILE', { id: 'extension-id', url: 'chrome-extension://extension-id/viewer.html' }).accepted, true);
 console.log('Chrome message response checks passed');
+
+let avatarReply;
+const avatarMessage = { type: 'GET_REEL', avatarUrl: 'https://scontent.example.cdninstagram.com/avatar.jpg' };
+listener(avatarMessage, { id: 'other', url: 'chrome-extension://extension-id/viewer.html' }, value => { avatarReply = value; });
+listener(avatarMessage, { id: 'extension-id', url: 'chrome-extension://extension-id/viewer.html.evil' }, value => { avatarReply = value; });
+assert.equal(avatarCalls, 0, '非记录页来源不得读取头像');
+assert.equal(listener(avatarMessage, { id: 'extension-id', url: 'chrome-extension://extension-id/viewer.html?tabId=1' }, value => { avatarReply = value; }), true);
+await new Promise(setImmediate);
+assert.equal(avatarReply.avatar, 'data:image/jpeg;base64,AQID');
+assert.equal(avatarCalls, 1);

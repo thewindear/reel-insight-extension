@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { authorFrom, mergeReels } from '../src/reel/extract.ts';
 
 const source = readFileSync(new URL('../src/content/reel-reader.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 const path = '/creator/reels/';
 const location = { pathname: path, search: '', get href() { return `https://www.instagram.com${this.pathname}${this.search}`; } };
-const items = [{ code: 'FIRST', url: 'https://www.instagram.com/reel/FIRST/', caption: null, authors: [] }];
+const items = [{ code: 'FIRST', url: 'https://www.instagram.com/reel/FIRST/', caption: null, authors: [], taggedUsers: [] }];
+items[0].authors = [authorFrom({ username: 'creator', profile_pic_url: 'https://example.com/avatar.jpg' })];
 const saved = new Map([['FIRST', { ...items[0], caption: 'Existing caption' }]]);
 let storedSettings = { autoProfile: true, profileMode: 'current-tab', profilePages: 2 };
 const clicked = [];
@@ -26,7 +28,7 @@ const context = {
   history: { /** 关闭详情并回到用户列表。 */ back() { location.pathname = path; } },
   window: { /** 首次自动滚动时模拟加载另一条 Reel。 */ scrollTo() {
     scrolls++;
-    if (scrolls === 1) items.push({ code: 'SECOND', url: 'https://www.instagram.com/reel/SECOND/', caption: null, authors: [] });
+    if (scrolls === 1) items.push({ code: 'SECOND', url: 'https://www.instagram.com/reel/SECOND/', caption: null, authors: [], taggedUsers: [] });
   } },
   document: {
     readyState: 'complete', documentElement: { scrollHeight: 5000 },
@@ -66,7 +68,7 @@ const context = {
       settingsFrom: value => ({ language: 'zh', autoFeed: true, autoProfileData: false, autoProfile: value?.autoProfile === true,
         profileDataMode: 'new-tab', profileMode: value?.profileMode === 'current-tab' ? 'current-tab' : 'new-tab', profilePages: value?.profilePages ?? 1, profileDelay: value?.profileDelay ?? 1000, profileDelayUnit: value?.profileDelayUnit ?? 'ms' }) };
     if (name === '../reel/extract') return { findReels: () => [], reelFromPageEvent: () => null,
-      mergeReels: (previous, next) => ({ ...previous, ...next, caption: next.caption ?? previous?.caption ?? null }) };
+      mergeReels };
     if (name === '../reel/profile-url') return { /** 只识别测试中的达人列表页。 */
       profileUsername: () => location.pathname === path ? 'creator' : null };
     if (name === './page') return { readFeedAuthor: () => null,
@@ -74,7 +76,7 @@ const context = {
       readProfileReels: () => location.pathname === path ? items : [],
       readActiveReel: () => location.pathname === path ? null : {
         code: location.pathname.match(/FIRST|SECOND/)?.[0],
-        reel: { ...items.find(item => location.pathname.includes(item.code)), caption: 'Detail caption' },
+        reel: { ...items.find(item => location.pathname.includes(item.code)), caption: 'Detail caption', authors: [authorFrom({ username: 'creator' })] },
       },
     };
     throw new Error(`Unexpected import: ${name}`);
@@ -88,6 +90,7 @@ await new Promise(setImmediate);
 await new Promise(setImmediate);
 assert.deepEqual(clicked, ['FIRST'], '自动模式即使已有 Caption 也应打开新 Reel 采集详情');
 assert.equal(saved.get('FIRST').caption, 'Detail caption');
+assert.equal(saved.get('FIRST').authors[0].avatar, 'https://example.com/avatar.jpg', '详情未提供头像时应保留网格头像');
 assert.ok(saveEvents.filter(event => event.code === 'FIRST').every(event => event.waited >= 1000), '等待结束前不能提前批量保存首条记录');
 assert.equal(clickWaits[0], 1000, '首条自动采集前应等待默认 1000 毫秒');
 poll();
@@ -101,7 +104,7 @@ assert.ok(saveEvents.filter(event => event.code === 'SECOND').every(event => eve
 assert.ok(clickWaits[1] - clickWaits[0] >= 1000, '跨页的下一条 Reel 也必须等待采集间隔');
 poll();
 assert.equal(scrolls, 1, '达到两页上限后不能继续滚动');
-items.push({ code: 'THIRD', url: 'https://www.instagram.com/reel/THIRD/', caption: null, authors: [] });
+items.push({ code: 'THIRD', url: 'https://www.instagram.com/reel/THIRD/', caption: null, authors: [], taggedUsers: [] });
 poll();
 assert.deepEqual(clicked, ['FIRST', 'SECOND'], '达到页数上限后，即使页面后来加载更多条目也不继续采集');
 items.pop();

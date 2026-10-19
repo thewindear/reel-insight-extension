@@ -2,7 +2,7 @@ import { findProfile, findReels, mergeProfiles, mergeReels, profileFromPageEvent
 import { profileUsername } from '../reel/profile-url';
 import { defaultSettings, settingsFrom } from '../reel/settings';
 import type { Author, Profile, ProfileProgress, Reel, ReelReply } from '../reel/types';
-import { advanceFeedReel, collectProfileAbout, readActiveReel, readFeedAuthor, readProfilePage, readProfileReels } from './page';
+import { advanceFeedReel, collectProfileAbout, readActiveReel, readAvatar, readFeedAuthor, readProfilePage, readProfileReels } from './page';
 
 /** 在隔离脚本中接收页面数据，并提供 popup 与悬浮按钮共用的读取方法。 */
 export function startReelReader(signal?: AbortSignal): () => ReelReply {
@@ -152,8 +152,9 @@ export function startReelReader(signal?: AbortSignal): () => ReelReply {
     const reel = reelFromPageEvent((event as CustomEvent).detail);
     if (reel) {
       cacheReel(reel);
-      // 推荐页已采集的视频允许补写迟到的计数，不把预加载的视频新增为记录。
-      if (settingsLoaded && settings.autoFeed && /^\/reels(?:\/|$)/.test(location.pathname) && saved.has(reel.code)) {
+      // 已保存视频允许补写迟到的赞助方；推荐页也补写计数，不新增预加载记录。
+      if (settingsLoaded && saved.has(reel.code) && ((reel.sponsors?.length ?? 0) > 0 ||
+        settings.autoFeed && /^\/reels(?:\/|$)/.test(location.pathname))) {
         void saveCurrentReel(reels.get(reel.code)!);
       }
     }
@@ -601,8 +602,10 @@ export function startReelReader(signal?: AbortSignal): () => ReelReply {
           if (runId !== id) return;
           if (location.pathname !== path) { autoSuspended = true; progress.state = 'stopped'; return; }
         }
+        // 打开详情前缓存网格作者头像，详情缺少作者字段时仍可合并展示。
+        cacheReel(item);
         // 自动采集不能在扫描列表时批量写入，缺少详情时仍保留当前条目的网格字段。
-        if (!onlyMissingCaption) await saveCurrentReel(mergeReels(reels.get(item.code), item));
+        if (!onlyMissingCaption) await saveCurrentReel(reels.get(item.code)!);
         if (runId !== id) return;
         if (location.pathname !== path) { autoSuspended = true; progress.state = 'stopped'; return; }
         openedCode = item.code;
@@ -649,7 +652,7 @@ export function startReelReader(signal?: AbortSignal): () => ReelReply {
   }
 
   /** 只允许扩展记录页控制页面内的批量补全或手动采集达人。 */
-  function onMessage(message: { type?: string }, sender: { id?: string; url?: string }, sendResponse: (reply: unknown) => void): void {
+  function onMessage(message: { type?: string; avatarUrl?: unknown }, sender: { id?: string; url?: string }, sendResponse: (reply: unknown) => void): boolean | void {
     if (message?.type === 'FEED_PROFILE_COMPLETE' && sender.id === browser.runtime.id) {
       const profile = (message as { profile?: unknown }).profile;
       if (typeof profile === 'string' && profile.toLowerCase() === pendingFeedProfile) {
@@ -663,6 +666,11 @@ export function startReelReader(signal?: AbortSignal): () => ReelReply {
       const code = (message as { code?: unknown }).code;
       if (typeof code === 'string' && code === pendingPlays) pendingPlays = '';
       return;
+    }
+    if (message?.type === 'GET_REEL' && 'avatarUrl' in message) {
+      if (sender.id !== browser.runtime.id || sender.url?.split('?')[0] !== browser.runtime.getURL('/viewer.html')) return;
+      void readAvatar(message.avatarUrl).then(avatar => sendResponse({ avatar }));
+      return true;
     }
     if (message?.type === 'GET_REEL') {
       const reply = readCurrentReel();

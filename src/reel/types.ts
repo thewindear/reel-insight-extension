@@ -35,6 +35,8 @@ export type Reel = {
   publishedAt: string | null;
   authors: Author[];
   taggedUsers: Author[];
+  /** 页面明确标注的付费合作品牌，不包含普通标记或文案提及。 */
+  sponsors: Author[];
   caption: string | null;
   videoUrl: string | null;
   coverUrl: string | null;

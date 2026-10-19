@@ -117,6 +117,26 @@ const reelRoot = {
 /** 将当前视频关联到自己的区域，避免读取相邻 Reel。 */
 videos[0].closest = () => reelRoot;
 assert.equal(context.exports.readActiveReel().reel.taggedUsers.map(user => user.username).join(','), 'marked.user,another.user');
+const sponsoredControl = {
+  textContent: 'Paid partnership with sponsor.brand',
+  /** 赞助控件通过明确的合作文案标识账号。 */
+  getAttribute() { return null; },
+  /** 本例的控件没有子级辅助名称。 */
+  querySelector() { return null; },
+};
+/** 赞助标记与普通标记、文案提及可以同时出现。 */
+reelRoot.querySelectorAll = () => [markedLink, mentionLink, plainLabelLink, sponsoredControl];
+assert.equal(context.exports.readActiveReel().reel.sponsors.map(user => user.username).join(','), 'sponsor.brand');
+assert.equal(context.exports.readActiveReel().reel.taggedUsers.map(user => user.username).join(','), 'marked.user,another.user');
+sponsoredControl.textContent = 'Paid partnership with sponsor.brand makes this trip possible';
+assert.equal(context.exports.readActiveReel().reel.sponsors.length, 0, '普通文案句子不能被误采集为赞助账号');
+sponsoredControl.textContent = '赞助方：myternx.eu、myternx';
+/** 实页赞助方行是普通 span，联合作者和文案提及均在其他控件。 */
+reelRoot.querySelectorAll = selector => selector.includes('span[dir="auto"]') ?
+  [sponsoredControl, { ...sponsoredControl, textContent: 'iv_kattie 和 myternx' }, mentionLink] :
+  [markedLink, mentionLink, plainLabelLink];
+assert.equal(context.exports.readActiveReel().reel.sponsors.map(user => user.username).join(','), 'myternx.eu,myternx');
+
 
 const adjacentLink = {
   textContent: 'adjacent.user',
@@ -143,6 +163,23 @@ const currentContainer = {
 videos[0].closest = () => null;
 videos[0].parentElement = currentContainer;
 assert.equal(context.exports.readActiveReel().reel.taggedUsers.map(user => user.username).join(','), 'marked.user');
+assert.equal(context.exports.readActiveReel().reel.sponsors.length, 0, '其他视频的赞助方不能混入当前视频');
+/** 推荐页中只读取当前单视频容器的赞助方，旁边预加载的视频不能混入。 */
+currentContainer.querySelectorAll = selector => selector === 'video' ? [videos[0]] :
+  selector.includes('span[dir="auto"]') ? [markedLink, sponsoredControl] : [markedLink];
+/** 相邻视频故意提供不同的赞助方，以检查采集范围。 */
+outer.querySelectorAll = selector => selector === 'video' ? [videos[0], {}] :
+  [markedLink, { ...sponsoredControl, textContent: '赞助方：adjacent.brand' }];
+assert.equal(context.exports.readActiveReel().reel.sponsors.map(user => user.username).join(','),
+  'myternx.eu,myternx', '推荐 Reels 支持一条视频的多个明确赞助方');
+location.href = 'https://www.instagram.com/meninblazers/reel/DZaNr7gtNEI/';
+location.pathname = '/meninblazers/reel/DZaNr7gtNEI/';
+/** 从达人列表展开的详情使用 article 容器，赞助方仍应独立采集。 */
+videos[0].closest = () => reelRoot;
+assert.equal(context.exports.readActiveReel().reel.sponsors.map(user => user.username).join(','),
+  'myternx.eu,myternx', '达人 Reels 列表展开后也支持多个明确赞助方');
+location.pathname = '/reels/DZaNr7gtNEI/';
+
 
 location.href = 'https://www.instagram.com/reels/NEWCODE/';
 /** 即使旧视频还显示着作者，也不能把其标记用户归到新地址。 */

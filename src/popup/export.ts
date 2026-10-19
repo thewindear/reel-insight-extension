@@ -19,7 +19,7 @@ export function exportRow(reel: SavedReel, language: Language = 'zh'): (string |
     JSON.stringify(reel.authors.slice(1)), JSON.stringify(reel.taggedUsers ?? []),
     reel.caption, caption.tags.join(', '), caption.mentions.join(', '), caption.links.join(', '),
     reel.videoUrl, reel.coverUrl, reel.plays, reel.likes, reel.comments, reel.reposts,
-    new Date(reel.savedAt),
+    new Date(reel.savedAt), JSON.stringify(reel.sponsors ?? []),
   ];
 }
 
@@ -28,7 +28,7 @@ export const exportHeaders = [
   '发布者头像', '发布者已认证', '发布者简介', '粉丝数', '关注数', '帖子数', '私密账号',
   '作者链接', '作者主页', '合作者资料', '标记用户资料', 'Caption', 'Tags', '提及的人',
   '文案链接', '视频原地址', '视频封面', '播放量', '赞数', '评论数', '转发数',
-  '最近采集时间 (UTC)',
+  '最近采集时间 (UTC)', '赞助方资料',
 ];
 
 export const exportHeadersEn = [
@@ -36,7 +36,7 @@ export const exportHeadersEn = [
   'Publisher avatar', 'Publisher verified', 'Publisher bio', 'Followers', 'Following', 'Posts', 'Private account',
   'Author link', 'Author profile', 'Collaborators JSON', 'Tagged users JSON', 'Caption', 'Tags', 'Mentions',
   'Caption links', 'Video URL', 'Video cover', 'Plays', 'Likes', 'Comments', 'Reposts',
-  'Last collected at (UTC)',
+  'Last collected at (UTC)', 'Sponsors JSON',
 ];
 
 /** 将一条达人记录映射为 Excel 的独立字段。 */

@@ -5,6 +5,7 @@ import { bioUrl, findProfile, findReels, mergeProfiles, mergeReels, profileFrom,
 const payload = { data: { reels_media: [{
   code: 'ABC123', pk: 456, is_video: true, taken_at: 1792063053,
   owner: { pk: 123, username: 'creator', full_name: 'Creator Name', profile_pic_url: 'https://example.com/avatar.jpg', is_verified: true },
+  sponsor_tags: [{ sponsor: { pk: '999', username: 'sponsor.brand', full_name: 'Sponsor Brand', profile_pic_url: 'https://example.com/sponsor.jpg' } }],
   coauthor_producers: [{ pk: 789, username: 'partner', full_name: 'Partner' }],
   usertags: { in: [
     { user: { pk: 246, username: 'tagged.one', full_name: 'Tagged One', profile_pic_url: 'https://example.com/tagged.jpg' } },
@@ -130,3 +131,21 @@ assert.equal(profileFromPageEvent(profile).category, 'Digital creator');
 assert.equal(profileFromPageEvent({ ...profile, category: {} }).category, '');
 assert.equal(mergeProfiles(profile, profileFrom({ username: 'creator' })).category, 'Digital creator');
 assert.equal(mergeProfiles(profile, profileFrom({ username: 'creator', category_name: 'Artist' })).category, 'Artist');
+
+assert.equal(reel.sponsors[0].username, 'sponsor.brand');
+assert.equal(reel.sponsors[0].avatar, 'https://example.com/sponsor.jpg');
+assert.equal(reel.sponsors[0].id, '999');
+assert.deepEqual(reelFromPageEvent(reel).sponsors, reel.sponsors);
+assert.deepEqual(mergeReels(reel, { ...reel, sponsors: [] }).sponsors, reel.sponsors);
+assert.equal(mergeReels(reel, { ...reel, sponsors: [{ ...reel.sponsors[0], avatar: null }] }).sponsors[0].avatar, reel.sponsors[0].avatar);
+const graphSponsor = findReels({ code: 'SPONSOR_GRAPH', owner: { username: 'creator' },
+  edge_media_to_sponsor_user: { edges: [{ node: { sponsor: { id: '99', username: 'brand' } } }] },
+  sponsor_tags: [{ sponsor: { username: 'BRAND' } }, { sponsor: { username: '<script>' } }, null],
+})[0];
+assert.deepEqual(graphSponsor.sponsors.map(user => user.username), ['BRAND']);
+assert.deepEqual(findReels({ code: 'NO_SPONSOR', owner: { username: 'creator' },
+  tagged_users: [{ username: 'tagged.brand' }], caption: 'Sponsored by @mention.brand' })[0].sponsors, []);
+assert.deepEqual(reelFromPageEvent({ ...reel, sponsors: [{ username: '<script>' }, null] }).sponsors, []);
+const oldReel = { ...reel };
+delete oldReel.sponsors;
+assert.deepEqual(mergeReels(oldReel, { ...reel, sponsors: [] }).sponsors, []);

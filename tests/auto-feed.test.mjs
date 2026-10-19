@@ -113,6 +113,17 @@ const beforePreload = reelSaves.length;
 pageListeners.get('instagram-plugin:reel')({ detail: { code: 'PRELOADED', plays: 9999, authors: [] } });
 await new Promise(setImmediate);
 assert.equal(reelSaves.length, beforePreload, '不能因为预加载响应新增未浏览的视频');
+// 从详情返回达人列表后，迟到的赞助方响应也要补写已保存视频。
+location.pathname = '/creator/reels/';
+pageListeners.get('instagram-plugin:reel')({ detail: { code: capturedCode, sponsors: [{ username: 'brand' }], authors: [] } });
+await new Promise(setImmediate);
+assert.equal(reelSaves.at(-1).code, capturedCode);
+assert.equal(reelSaves.at(-1).sponsors[0].username, 'brand');
+const beforeSponsorPreload = reelSaves.length;
+pageListeners.get('instagram-plugin:reel')({ detail: { code: 'SPONSOR_PRELOADED', sponsors: [{ username: 'brand' }], authors: [] } });
+await new Promise(setImmediate);
+assert.equal(reelSaves.length, beforeSponsorPreload, '带赞助方的预加载响应也不能新增记录');
+location.pathname = '/reels/';
 change({ feedDelay: 1000, feedDelayUnit: 'ms' });
 read();
 await new Promise(setImmediate);

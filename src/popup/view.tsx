@@ -13,7 +13,7 @@ import type { Author, Reel } from '../reel/types';
 import { downloadExcel, downloadProfilesExcel } from './export';
 import { translate, type Language } from '../reel/i18n';
 import { paginate } from './pagination';
-import { useReel } from './use-reel';
+import { loadAvatar, useReel } from './use-reel';
 import { copyText } from './clipboard';
 
 const LanguageContext = createContext<Language>('zh');
@@ -41,6 +41,17 @@ function safeHref(value: string | null): string | null {
   catch { return null; }
 }
 
+/** 将受来源限制的 CDN 头像转为临时图片，切换作者或卸载后忽略旧请求。 */
+function CreatorAvatarImage({ src, ...props }: { src: string; alt: string; className?: string }): React.ReactNode {
+  const [image, setImage] = useState<{ source: string; data: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadAvatar(src).then(data => { if (active && data) setImage({ source: src, data }); });
+    return () => { active = false; };
+  }, [src]);
+  return <AvatarImage src={image?.source === src ? image.data : src} {...props} />;
+}
+
 /** 渲染包含可选数量提示的分区标题。 */
 function SectionTitle({ title, count }: { title: string; count?: string }): React.ReactNode {
   const t = useText();
@@ -63,14 +74,14 @@ function MetricTile({ label, value, icon: Icon }: { label: string; value: number
 }
 
 /** 展示作者或标记用户的头像、身份和页面可提供的账号资料。 */
-function AuthorRow({ author, role }: { author: Author; role: '发布者' | '合作者' | '已标记' }): React.ReactNode {
+function AuthorRow({ author, role }: { author: Author; role: '发布者' | '合作者' | '已标记' | '赞助方' }): React.ReactNode {
   const t = useText();
   const profile = `https://www.instagram.com/${encodeURIComponent(author.username)}/`;
   const externalHref = bioUrl(author.externalUrl);
   return <div className="py-3">
     <div className="flex items-center gap-3">
       <Avatar size="lg" className="rounded-[13px] ring-1 ring-border">
-        {author.avatar && <AvatarImage src={author.avatar} alt={`${author.username} ${t('头像')}`} className="object-cover" />}
+        {author.avatar && <CreatorAvatarImage src={author.avatar} alt={`${author.username} ${t('头像')}`} className="object-cover" />}
         <AvatarFallback className="rounded-[13px] bg-secondary font-semibold text-foreground">
           {author.username[0]?.toUpperCase() ?? '?'}
         </AvatarFallback>
@@ -135,6 +146,7 @@ function ReelDetails({ reel }: { reel: Reel }): React.ReactNode {
   const entities = captionEntities(reel.caption ?? '');
   // 扩展刚更新但 Instagram 尚未刷新时，旧内容脚本可能不包含新字段。
   const taggedUsers = reel.taggedUsers ?? [];
+  const sponsors = reel.sponsors ?? [];
   return <div className="space-y-6 pb-5">
     <section>
       <div className="mb-3 flex items-end justify-between">
@@ -179,6 +191,16 @@ function ReelDetails({ reel }: { reel: Reel }): React.ReactNode {
           <AuthorRow author={user} role="已标记" />
         </div>)}
       </div> : <p className="rounded-xl bg-secondary/70 px-3.5 py-3 text-[12px] text-muted-foreground">{t('当前页面未提供标记用户')}</p>}
+    </section>
+
+    <section>
+      <SectionTitle title="赞助方" count={`${sponsors.length} ${t('位')}`} />
+      {sponsors.length ? <div className="rounded-xl border border-border bg-card px-3.5">
+        {sponsors.map((user, index) => <div key={user.username}>
+          {index > 0 && <Separator />}
+          <AuthorRow author={user} role="赞助方" />
+        </div>)}
+      </div> : <p className="rounded-xl bg-secondary/70 px-3.5 py-3 text-[12px] text-muted-foreground">{t('当前页面未提供赞助方')}</p>}
     </section>
 
     <section>
@@ -262,7 +284,7 @@ function SavedTable({ records, currentCode, onSelect }: { records: SavedReel[]; 
         <td className="px-3 py-3"><span title={reel.caption ?? undefined} className="line-clamp-2 break-words whitespace-pre-wrap leading-4">{reel.caption || '—'}</span></td>
         <td className="px-3 py-3"><div className="flex items-center gap-2">
           <Avatar className="ring-1 ring-border">
-            {avatar && <AvatarImage src={avatar} alt={`${author?.username ?? t('主作者')} ${t('头像')}`} className="object-cover" />}
+            {avatar && <CreatorAvatarImage src={avatar} alt={`${author?.username ?? t('主作者')} ${t('头像')}`} className="object-cover" />}
             <AvatarFallback>{author?.username?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
           </Avatar>
           <div className="min-w-0"><div className="break-words font-medium">{author?.name || author?.username || '—'}</div><div className="break-all text-muted-foreground">{author ? `@${author.username}` : '—'}</div></div>
@@ -339,7 +361,7 @@ function ProfilesTable({ records }: { records: SavedProfile[] }): React.ReactNod
           <th key={label} scope="col" className="border-b border-border px-3 py-2.5 font-medium" style={{ width: index === 7 || index === 8 ? 230 : index === 0 ? 68 : 120 }}>{t(label)}</th>)}
       </tr></thead>
       <tbody>{records.map(profile => <tr key={profile.username} className="border-b border-border/70 align-top last:border-0">
-        <td className="px-3 py-3"><Avatar className="ring-1 ring-border">{safeHref(profile.avatar) && <AvatarImage src={profile.avatar!} alt={`${profile.username} ${t('头像')}`} />}<AvatarFallback>{profile.username[0]?.toUpperCase()}</AvatarFallback></Avatar></td>
+        <td className="px-3 py-3"><Avatar className="ring-1 ring-border">{safeHref(profile.avatar) && <CreatorAvatarImage src={profile.avatar!} alt={`${profile.username} ${t('头像')}`} />}<AvatarFallback>{profile.username[0]?.toUpperCase()}</AvatarFallback></Avatar></td>
         <td className="break-words px-3 py-3">{profile.name ?? '—'}</td>
         <td className="break-all px-3 py-3 font-mono">{profile.id ?? '—'}</td>
         <td className="break-all px-3 py-3"><a href={profile.profileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{profile.username}</a></td>

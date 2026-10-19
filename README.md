@@ -19,6 +19,7 @@ Collect Instagram Reels data while browsing.
 - **Feed Enrichment Switches** — Under feed collection, “Automatically fill video plays” and “Automatically fill creator information” independently control creator-list plays lookup and feed publisher/account collection. Both default to on and require feed collection to be enabled. Enabling creator enrichment also enables automatic creator profile collection; turning creator collection off in Settings turns feed creator enrichment off too. Disabling either enrichment switch cancels its pending task.
 - **Creator List Plays Backfill** — With automatic video plays enabled, when a collected feed Reel has no play count, a dedicated window opens its publisher’s Reels list and matches the exact shortcode. It searches up to the configured creator page limit, waits up to ten seconds per page, and uses the creator collection delay between page scrolls. An exact count updates only the existing target record; captions and other fields are preserved. The window closes afterward and automatic feed browsing resumes. Closing the worker or disabling feed collection stops the lookup. Missing, inaccessible, or abbreviated counts remain empty; this does not bulk-process all older saved records.
 - **Late Count Updates** — Feed collection continues saving newly available counts while waiting to advance. Later page responses can fill counts for already collected Reels without adding unvisited preloaded videos. Plays remain empty when Instagram does not provide a count; the extension does not estimate counts or make extra data requests.
+- **Sponsors** — Collect accounts explicitly listed as paid-partnership sponsors in recommended Reels and details opened from creator Reels grids separately from collaborators, tagged users, and caption mentions. Show sponsor details and export them as a separate JSON column; missing sponsors use an empty list.
 - **Detailed Reel Information** — Extract available video information, captions, and engagement metrics.
 - **Caption Enrichment** — Retrieve additional details for previously discovered Reels.
 - **Duplicate Prevention** — Automatically update existing records using `reels_id`, or shortcode when the ID is unavailable.
@@ -26,7 +27,7 @@ Collect Instagram Reels data while browsing.
 
 ### 👤 Instagram Creator Profiles
 
-Collect detailed creator information directly from Instagram profiles.
+Collect detailed creator information directly from Instagram profiles. Avatar images are loaded through the source Instagram tab when the CDN blocks the extension origin. Only validated CDN image URLs are accepted, requests omit credentials and stop at 512 KB, and image data stays temporary rather than being saved to records.
 
 Supported fields include:
 

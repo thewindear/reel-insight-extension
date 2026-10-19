@@ -20,6 +20,7 @@ const english: Record<string, string> = {
   '需要刷新页面': 'Refresh the page', '扩展刚安装或更新时，请刷新 Instagram 页面。': 'Refresh Instagram after installing or updating the extension.',
   '视频详情': 'Reel details', '发布时间': 'Published', 'Reel 封面': 'Reel cover', '封面未提供': 'No cover',
   '播放量': 'Plays', '赞数': 'Likes', '评论数': 'Comments', '转发数': 'Reposts',
+  '赞助方': 'Sponsors', '当前页面未提供赞助方': 'No sponsors provided by this page',
   '作者信息': 'Authors', '位': 'people', '发布者': 'Publisher', '合作者': 'Collaborator', '已标记': 'Tagged',
   '已认证': 'Verified', '头像': 'avatar', '粉丝': 'Followers', '关注': 'Following', '帖子': 'Posts',
   '私密账号': 'Private account', '公开账号': 'Public account', '作者链接': 'Author link',

@@ -27,6 +27,20 @@ function sourceReel(): { tabId: number; code: string | null } | null {
   return Number.isSafeInteger(id) && id > 0 ? { tabId: id, code } : null;
 }
 
+/** 向来源 Instagram 标签页读取临时头像，绕过 CDN 对扩展来源的图片读取限制。 */
+export async function loadAvatar(url: string): Promise<string | null> {
+  try {
+    const source = sourceReel();
+    const [tab] = source ? [] : await browser.tabs.query({ active: true, currentWindow: true });
+    const tabId = source?.tabId ?? tab?.id;
+    if (!tabId || (tab?.url && !isInstagramTab(tab.url))) return null;
+    const reply: unknown = await browser.tabs.sendMessage(tabId, { type: 'GET_REEL', avatarUrl: url });
+    const avatar = reply && typeof reply === 'object' && 'avatar' in reply ? reply.avatar : null;
+    return typeof avatar === 'string' && avatar.length <= 710000 &&
+      /^data:image\/(?:jpeg|png|webp|gif|avif);base64,[A-Za-z0-9+/=]+$/.test(avatar) ? avatar : null;
+  } catch { return null; }
+}
+
 /** 轮询当前 Reel，并向界面提供加载、错误和成功状态。 */
 export function useReel(): { state: PopupState; refresh: () => void; controlEnrichment: (type: 'START_PROFILE_ENRICHMENT' | 'STOP_PROFILE_ENRICHMENT' | 'COLLECT_PROFILE') => Promise<void> } {
   const [state, setState] = useState<PopupState>({ kind: 'loading' });

@@ -2,6 +2,37 @@ import { authorFrom, profileFrom } from '../reel/extract';
 import { profileUsername } from '../reel/profile-url';
 import type { Author, Profile, Reel } from '../reel/types';
 
+/** 在 Instagram 来源下读取有限大小的 CDN 头像，仅返回可展示的图片数据。 */
+export async function readAvatar(value: unknown): Promise<string | null> {
+  if (typeof value !== 'string' || value.length > 4096) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port ||
+      !['cdninstagram.com', 'fbcdn.net'].some(host => url.hostname.endsWith(`.${host}`)) ||
+      !/\.(?:jpg|jpeg|png|webp|gif|avif)$/i.test(url.pathname)) return null;
+    const response = await fetch(url.href, { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(10000) });
+    const mime = response.headers.get('content-type')?.split(';')[0]?.trim();
+    if (!response.ok || !mime || !/^image\/(?:jpeg|png|webp|gif|avif)$/.test(mime) || !response.body) return null;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    // 不相信响应声明的大小，逐块限制头像体积，避免页面数据触发大文件读取。
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 512 * 1024) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+    return await new Promise<string | null>(resolve => {
+      const file = new FileReader();
+      file.onload = () => resolve(typeof file.result === 'string' ? file.result : null);
+      file.onerror = () => resolve(null);
+      file.readAsDataURL(new Blob(chunks, { type: mime }));
+    });
+  } catch { return null; }
+}
+
 /** 从 Reel 详情或信息流地址中读取 shortcode。 */
 function reelCode(url: string): string | null {
   return url.match(/\/(?:reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? null;
@@ -221,8 +252,8 @@ function videoReelLink(video: HTMLVideoElement | null): HTMLAnchorElement | null
   return null;
 }
 
-/** 从当前视频的标记控件读取页面可见的用户名，不把 caption 提及误认成标记。 */
-function visibleTaggedUsers(video: HTMLVideoElement | null): Reel['taggedUsers'] {
+/** 从当前视频明确标注的控件读取标记或赞助账号，不把普通文案提及混入。 */
+function visibleReelUsers(video: HTMLVideoElement | null, kind: 'tagged' | 'sponsor' = 'tagged'): Author[] {
   if (!video) return [];
   let scope: Element | null = video.closest('article');
   if (!scope) {
@@ -232,15 +263,17 @@ function visibleTaggedUsers(video: HTMLVideoElement | null): Reel['taggedUsers']
       parent.querySelectorAll('video').length === 1; parent = parent.parentElement) scope = parent;
   }
   const users = new Map<string, NonNullable<ReturnType<typeof authorFrom>>>();
-  const prefix = /^(?:已标记的用户|标记的用户|标记用户|被标记的用户|Tagged (?:people|users)|People tagged)[:：\s]*/i;
-  for (const control of scope.querySelectorAll<HTMLElement>('a, button, [role="button"]')) {
+  const prefix = kind === 'sponsor' ? /^(?:Paid partnership with|赞助方|赞助商|付费合作伙伴|付费合作)[:：\s]+/i : /^(?:已标记的用户|标记的用户|标记用户|被标记的用户|Tagged (?:people|users)|People tagged)[:：\s]*/i;
+  // 展开详情里的赞助方是一行普通文本与链接，不一定是按钮。
+  const selector = kind === 'sponsor' ? 'span[dir="auto"], a, button, [role="button"]' : 'a, button, [role="button"]';
+  for (const control of scope.querySelectorAll<HTMLElement>(selector)) {
     const label = control.getAttribute('aria-label') ?? control.querySelector('[aria-label]')?.getAttribute('aria-label') ?? '';
     const text = control.textContent?.trim() ?? '';
     const names = [label, text].filter(value => prefix.test(value))
       .map(value => value.replace(prefix, '').trim()).filter(Boolean).join(',');
     // 控件可能只显示第一位及“其他人”，仅接受每段开头的合法 username。
     for (const segment of names.split(/[,，、]+/)) {
-      const username = segment.trim().match(/^@?([A-Za-z0-9._]{1,30})(?:\s|$)/)?.[1];
+      const username = segment.trim().match(kind === 'sponsor' ? /^@?([A-Za-z0-9._]{1,30})$/ : /^@?([A-Za-z0-9._]{1,30})(?:\s|$)/)?.[1];
       const user = username ? authorFrom({ username }) : null;
       if (user) users.set(user.username, user);
     }
@@ -290,7 +323,8 @@ function pageReel(code: string, video: HTMLVideoElement | null): Reel | null {
     mediaId: mediaId ?? null,
     publishedAt: null,
     authors: [author],
-    taggedUsers: visibleTaggedUsers(video),
+    taggedUsers: visibleReelUsers(video),
+    sponsors: visibleReelUsers(video, 'sponsor'),
     caption,
     videoUrl: mediaUrl(video?.currentSrc || video?.src),
     coverUrl: mediaUrl(video?.poster || (currentMeta ? document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content : null)),
@@ -360,7 +394,7 @@ export function readProfileReels(): Reel[] {
       const image = link.querySelector<HTMLImageElement>('img');
       found.set(code, {
         code, url: `https://www.instagram.com/reel/${encodeURIComponent(code)}/`,
-        mediaId: null, publishedAt: null, authors: [author], taggedUsers: [],
+        mediaId: null, publishedAt: null, authors: [author], taggedUsers: [], sponsors: [],
         caption: null, videoUrl: null, coverUrl: mediaUrl(image?.currentSrc || image?.src),
         plays: exactCount(link.textContent?.trim()), likes: null, comments: null, reposts: null,
       });

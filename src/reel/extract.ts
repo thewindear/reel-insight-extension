@@ -227,6 +227,12 @@ export function reelFrom(value: unknown): Reel | null {
     .map(candidate => authorFrom(path(candidate, 'node', 'user') ?? record(candidate)?.user ?? candidate))
     .filter((author): author is Author => author !== null)
     .filter((author, index, all) => all.findIndex(other => other.username === author.username) === index);
+  // 两类接口都提供明确的 sponsor 关联，不能从普通标记或文案推断赞助关系。
+  const sponsors = [item.sponsor_tags, path(item, 'edge_media_to_sponsor_user', 'edges')]
+    .flatMap(value => Array.isArray(value) ? value.slice(0, 20) : [])
+    .map(candidate => authorFrom(path(candidate, 'node', 'sponsor') ?? record(candidate)?.sponsor))
+    .filter((author): author is Author => author !== null && /^[A-Za-z0-9._]{1,30}$/.test(author.username))
+    .filter((author, index, all) => all.findIndex(other => other.username.toLowerCase() === author.username.toLowerCase()) === index);
   const captionNode = path(item, 'edge_media_to_caption', 'edges');
   const caption = first(
     path(item, 'caption', 'text'),
@@ -242,6 +248,7 @@ export function reelFrom(value: unknown): Reel | null {
     publishedAt: publicationTime(item.taken_at) ?? publicationTime(item.taken_at_timestamp),
     authors,
     taggedUsers,
+    sponsors,
     caption,
     videoUrl: mediaUrl(first(item.video_url, Array.isArray(videoVersions) ? record(videoVersions[0])?.url : null)),
     coverUrl: mediaUrl(first(item.display_url, item.thumbnail_src, item.cover_url,
@@ -293,6 +300,7 @@ export function mergeReels(existing: Reel | undefined, incoming: Reel): Reel {
     ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== null)),
     authors: mergeUsers(existing.authors, incoming.authors),
     taggedUsers: mergeUsers(existing.taggedUsers, incoming.taggedUsers),
+    sponsors: mergeUsers(existing.sponsors ?? [], incoming.sponsors ?? []),
   } as Reel;
 }
 
@@ -323,6 +331,8 @@ export function reelFromPageEvent(value: unknown): Reel | null {
     publishedAt: publicationTime(item.publishedAt),
     authors,
     taggedUsers: eventUsers(Array.isArray(item.taggedUsers) ? item.taggedUsers : []),
+    sponsors: eventUsers(Array.isArray(item.sponsors) ? item.sponsors.slice(0, 20) : [])
+      .filter(author => /^[A-Za-z0-9._]{1,30}$/.test(author.username)),
     caption: string(item.caption),
     videoUrl: mediaUrl(item.videoUrl),
     coverUrl: mediaUrl(item.coverUrl),

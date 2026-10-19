@@ -88,3 +88,11 @@ console.log('Saved Reel upsert and Excel field mapping checks passed');
 assert.equal(exportProfileRow({ ...profiles[0], category: 'Artist' })[15], 'Artist');
 assert.equal(exportProfileRow(profiles[0])[15], '');
 assert.equal(upsertProfile([], { ...profile, category: 'Artist' }, '2026-10-16T00:00:00.000Z')[0].category, 'Artist');
+
+const sponsor = { ...author, username: 'brand', profileUrl: 'https://www.instagram.com/brand/' };
+const sponsored = upsertReel(updated, { ...reel, sponsors: [sponsor] }, '2026-10-16T04:00:00.000Z');
+assert.equal(sponsored[0].sponsors[0].username, 'brand');
+assert.equal(JSON.parse(exportRow(sponsored[0])[29])[0].username, 'brand');
+assert.equal(exportHeaders[29], '赞助方资料');
+assert.equal(exportHeadersEn[29], 'Sponsors JSON');
+assert.equal(exportRow(reel)[29], '[]');
